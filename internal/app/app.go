@@ -3,16 +3,11 @@ package app
 import (
 	"fmt"
 	"net"
-	"net/http"
 	"time"
-
-	"github.com/egoist/mygo"
-	"github.com/egoist/mygo/ui"
 
 	"tungo/internal/core"
 	"tungo/internal/i18n"
 	"tungo/internal/logs"
-	"tungo/internal/proxy"
 	"tungo/internal/sub"
 	"tungo/internal/sysproxy"
 )
@@ -29,117 +24,16 @@ const keepLogs = 200
 var direct = core.Node{Name: "直连（不经节点）", Protocol: "direct"}
 
 type app struct {
-	win  *mygo.Window
-	tray *mygo.Tray
-
-	quitting bool
-
-	maximized bool
-
-	themeName string
-
-	nodes      []core.Node
-	nodesAt    string
-	chosen     int
-	list       ui.ListState
-	connList   ui.ListState
-	conns      []core.Conn
-	panePct    float32
-	tab        int
-	group      string
-	shown      []int
-	row        int
-	rowAt      int
-	kind       string
-	port       string
-	ms         []int
-	speed      []float64
-	notice     string
-	noticeKind noticeKind
-	busy       bool
-	tries      int
-	logs       []string
-	logScroll  ui.ScrollState
-
-	writeNext string
-	queued    []func()
-
-	subs       sub.State
-	subNote    string
-	subBusy    bool
-	subDraft   sub.Item
-	subAt      int
-	subFormAt  string
-	installing string
-	installAt  string
-
-	version    string
-	versionFor core.Kind
-	latest     string
-	skipped    map[string]string
-	checking   bool
-	have       map[core.Kind]bool
-	updating   bool
-
-	editing        bool
-	editingGroup   bool
-	groupWas       core.Node
-	groupName      string
-	groupStrategy  string
-	groupPick      map[string]bool
-	groupNote      string
-	editingSub     bool
-	editingSubItem bool
-	subInterval    string
-
-	shortcuts        map[string]string
-	shortcutShowKey  string
-	shortcutConnKey  string
-	shortcutProxyKey string
-	editingShortcuts bool
-
-	routes           core.RoutingSet
-	editingRoute     bool
-	editingRouteName bool
-	routeName        string
-	rules            []core.Rule
-	routeFinalAt     int
-	routeStrategy    string
-
-	editingRule   bool
-	ruleAt        int
-	ruleDraft     core.Rule
-	ruleDomains   string
-	ruleIPs       string
-	rulePort      string
-	ruleNetwork   string
-	ruleProtocols string
-	editingDNS    bool
-	dnsRemote     string
-	dnsDirect     string
-	dnsBootstrap  string
-	dnsStrategy   string
-	dnsBlockAAAA  bool
-	dnsHosts      string
-	dnsSplit      string
-	draft         core.Node
-	draftPort     string
-	draftWas      core.Node
-	detourName    string
-	rawText       string
-	alterID       string
-	alpn          string
-
-	local  *proxy.Server
-	kernel *core.Kernel
-	stop   chan struct{}
-	pac    *http.Server
-
-	proxy   string
-	tun     bool
-	applied bool
-	up      int64
-	down    int64
+	shell
+	lists
+	servers
+	feedback
+	subscriptions
+	kernels
+	hotkeys
+	forms
+	routing
+	link
 }
 
 func newApp() *app {
@@ -147,17 +41,12 @@ func newApp() *app {
 	nodes, at, err := core.LoadNodes()
 	routes, routeErr := core.LoadRoutingSet()
 	a := &app{
-		nodes:     nodes,
-		nodesAt:   at,
-		kind:      string(core.Auto),
-		routes:    routes,
-		proxy:     string(sysproxy.ModeSet),
-		themeName: "light",
-		port:      appPort,
-		panePct:   65,
-		ms:        make([]int, len(nodes)),
-		speed:     make([]float64, len(nodes)),
-		subs:      sub.Load(),
+		shell:         shell{themeName: "light"},
+		lists:         lists{panePct: 65},
+		servers:       servers{nodes: nodes, nodesAt: at, kind: string(core.Auto), port: appPort, ms: make([]int, len(nodes)), speed: make([]float64, len(nodes))},
+		subscriptions: subscriptions{subs: sub.Load()},
+		routing:       routing{routes: routes},
+		link:          link{proxy: string(sysproxy.ModeSet)},
 	}
 	for i := range a.ms {
 		a.ms[i] = -1
