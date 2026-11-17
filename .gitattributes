@@ -1,0 +1,2 @@
+resources/bin/*.exe filter=lfs diff=lfs merge=lfs -text
+resources/bin/*.dll filter=lfs diff=lfs merge=lfs -text
