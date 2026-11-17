@@ -7,7 +7,7 @@ var Routings = []string{"绕过大陆", "黑名单", "全局"}
 func DefaultRouting() Routing { return PresetRouting(Routings[0]) }
 
 func PresetRouting(name string) Routing {
-	routing := Routing{Strategy: "IPIfNonMatch", Rules: globalRules()}
+	routing := Routing{Strategy: "IPIfNonMatch", Rules: baseRules()}
 	switch name {
 	case "黑名单":
 		routing.Rules = blackRules()
@@ -18,7 +18,7 @@ func PresetRouting(name string) Routing {
 	return routing
 }
 
-func globalRules() []Rule {
+func baseRules() []Rule {
 	return []Rule{
 		{Remark: "阻断 UDP 443", Out: "block", Port: "443", Network: "udp"},
 		{Remark: "绕过局域网地址", Out: "direct", IP: []string{"geoip:private"}},
@@ -27,17 +27,14 @@ func globalRules() []Rule {
 }
 
 func mainlandRules() []Rule {
-	return []Rule{
-		{Remark: "阻断 UDP 443", Out: "block", Port: "443", Network: "udp"},
-		{Remark: "绕过局域网地址", Out: "direct", IP: []string{"geoip:private"}},
-		{Remark: "绕过局域网域名", Out: "direct", Domain: []string{"geosite:private"}},
-		{Remark: "绕过中国公共 DNS 地址", Out: "direct", IP: chinaDNS},
-		{Remark: "绕过中国公共 DNS 域名", Out: "direct", Domain: []string{
+	return append(baseRules(),
+		Rule{Remark: "绕过中国公共 DNS 地址", Out: "direct", IP: chinaDNS},
+		Rule{Remark: "绕过中国公共 DNS 域名", Out: "direct", Domain: []string{
 			"domain:alidns.com", "domain:doh.pub", "domain:dot.pub", "domain:360.cn", "domain:onedns.net",
 		}},
-		{Remark: "绕过中国地址", Out: "direct", IP: []string{"geoip:cn"}},
-		{Remark: "绕过中国域名", Out: "direct", Domain: []string{"geosite:cn"}},
-	}
+		Rule{Remark: "绕过中国地址", Out: "direct", IP: []string{"geoip:cn"}},
+		Rule{Remark: "绕过中国域名", Out: "direct", Domain: []string{"geosite:cn"}},
+	)
 }
 
 func blackRules() []Rule {
@@ -109,12 +106,7 @@ func RegionRouting(name string) Routing {
 }
 
 func regional(own []Rule) Routing {
-	rules := []Rule{
-		{Remark: "阻断 UDP 443", Out: "block", Port: "443", Network: "udp"},
-		{Remark: "绕过局域网地址", Out: "direct", IP: []string{"geoip:private"}},
-		{Remark: "绕过局域网域名", Out: "direct", Domain: []string{"geosite:private"}},
-	}
-	rules = append(rules, own...)
+	rules := append(baseRules(), own...)
 	rules = append(rules, Rule{Remark: "拦截广告", Out: "block", Domain: []string{"geosite:category-ads-all"}})
 	return Routing{Strategy: "IPIfNonMatch", Rules: rules}
 }

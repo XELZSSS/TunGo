@@ -19,7 +19,7 @@ func drawMark(size int) image.Image {
 	}, size, size, 1)
 }
 
-func appIcon(size int) []byte {
+func appIcon(size int) ([]byte, error) {
 	pad := size * 14 / 100
 	inner := size - 2*pad
 	drawn := drawMark(inner)
@@ -69,8 +69,10 @@ func inside(x, y, size, radius float64) bool {
 	return dx*dx+dy*dy <= radius*radius
 }
 
-func encode(img image.Image) []byte {
+func encode(img image.Image) ([]byte, error) {
 	var out bytes.Buffer
-	_ = png.Encode(&out, img)
-	return out.Bytes()
+	if err := png.Encode(&out, img); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
 }

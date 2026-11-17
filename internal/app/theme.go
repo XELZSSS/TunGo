@@ -113,16 +113,16 @@ var (
 	}
 )
 
-var listThemes = map[*ui.Theme]*ui.Theme{
-	lightTheme: listOf(lightTheme),
-	darkTheme:  listOf(darkTheme),
-}
+var (
+	lightList = listOf(lightTheme)
+	darkList  = listOf(darkTheme)
+)
 
 func listTheme(t *ui.Theme) *ui.Theme {
-	if one, ok := listThemes[t]; ok {
-		return one
+	if t.Dark {
+		return darkList
 	}
-	return listOf(t)
+	return lightList
 }
 
 func listOf(t *ui.Theme) *ui.Theme {

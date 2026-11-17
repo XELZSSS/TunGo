@@ -3,9 +3,6 @@
 *.syso
 /*.exe
 
-/resources/bin/*.exe
-/resources/bin/*.dll
-
 /data/
 
 *.log

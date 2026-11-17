@@ -25,7 +25,7 @@ func (a *app) routeForm(c *ui.Context) {
 	t := c.Theme()
 	ui.Modal(c, &a.editingRoute, func() {
 		ui.Column(c).Gap(gapLoose).Width(660).Height(560).Children(func() {
-			heading(c, fmt.Sprintf(i18n.T("路由规则 · %s"), i18n.T(a.routes.Current)))
+			heading(c, fmt.Sprintf(i18n.T("路由规则 · %s"), routeLabel(a.routes.Current)))
 			muted(c, t, i18n.T("从上往下第一条命中的规则决定走法，都没有命中就按最终走法。域名可写 geosite:cn、domain:x、full:x、keyword:x、regexp:x，地址可写 geoip:cn、网段或单个地址，端口可写 80,443 或 1000-2000。"))
 			ui.Row(c).Gap(gapBase).AlignItems(ui.Center).Children(func() {
 				muted(c, t, i18n.T("最终走法"))
@@ -158,6 +158,24 @@ func (a *app) commitRule() {
 	a.backToRules()
 }
 
+func (a *app) dnsPresets() []string {
+	names := make([]string, 0, len(core.DNSPresets)+1)
+	for _, one := range core.DNSPresets {
+		names = append(names, i18n.T(one.Name))
+	}
+	return append(names, i18n.T("自定义"))
+}
+
+func (a *app) applyDNSPreset(name string) {
+	for _, one := range core.DNSPresets {
+		if i18n.T(one.Name) != name {
+			continue
+		}
+		a.dnsRemote, a.dnsDirect, a.dnsBootstrap = one.Remote, one.Direct, one.Bootstrap
+		return
+	}
+}
+
 func (a *app) backToRules() {
 	a.editingRule = false
 	a.editingRoute = true
@@ -231,12 +249,19 @@ func (a *app) dnsForm(c *ui.Context) {
 	ui.Modal(c, &a.editingDNS, func() {
 		ui.Column(c).Gap(gapLoose).Width(560).Height(520).Children(func() {
 			heading(c, i18n.T("DNS 设置"))
-			muted(c, t, i18n.T("远程 DNS 由节点承载，直连域名用直连 DNS 解析。地址可写 udp://、tls://、https:// 或 quic:// 开头的服务器。"))
+			muted(c, t, i18n.T("三个都填 DoH：远程 DNS 走节点，直连域名用直连 DNS，引导 DNS 只用来解析上面两个的域名。全程加密，运营商看不到你查了什么。"))
 			ui.Scroll(c).Grow(1).Children(func() {
 				ui.Column(c).Gap(gapLoose).Children(func() {
+					preset := i18n.T(core.DNSPresetOf(core.DNS{Remote: a.dnsRemote, Direct: a.dnsDirect, Bootstrap: a.dnsBootstrap}))
+					if preset == "" {
+						preset = i18n.T("自定义")
+					}
+					if ui.Select(c, &preset, a.dnsPresets()).Label(i18n.T("服务商（选了就填好下面三个）")).Grow(1).Changed() {
+						a.applyDNSPreset(preset)
+					}
 					ui.TextInput(c, &a.dnsRemote).Label(i18n.T("远程 DNS")).Placeholder("https://1.1.1.1/dns-query").Grow(1)
-					ui.TextInput(c, &a.dnsDirect).Label(i18n.T("直连 DNS")).Placeholder("223.5.5.5").Grow(1)
-					ui.TextInput(c, &a.dnsBootstrap).Label(i18n.T("引导 DNS（用来解析上面两个服务器的域名）")).Placeholder("223.5.5.5").Grow(1)
+					ui.TextInput(c, &a.dnsDirect).Label(i18n.T("直连 DNS")).Placeholder("https://223.5.5.5/dns-query").Grow(1)
+					ui.TextInput(c, &a.dnsBootstrap).Label(i18n.T("引导 DNS（用来解析上面两个服务器的域名）")).Placeholder("https://8.8.8.8/dns-query").Grow(1)
 					ui.Row(c).Gap(12).Children(func() {
 						ui.Select(c, &a.dnsStrategy, core.DNSStrategies).Label(i18n.T("解析结果")).Width(200)
 						ui.Toggle(c, &a.dnsBlockAAAA, i18n.T("屏蔽 IPv6 查询（AAAA）"))
@@ -301,7 +326,7 @@ func (a *app) saveRouting() {
 	}
 	a.routes.Put(a.routes.Current, routing)
 	a.logf(i18n.T("路由规则已保存（%s）：%d 条规则，最终%s"),
-		i18n.T(a.routes.Current), len(routing.Rules), finalName(routing.FinalTag()))
+		routeLabel(a.routes.Current), len(routing.Rules), finalName(routing.FinalTag()))
 	a.saveRoutes()
 }
 
@@ -321,7 +346,7 @@ func (a *app) selectRouting(name string) {
 		return
 	}
 	a.routes.Current = name
-	a.logf(i18n.T("路由配置：%s"), i18n.T(name))
+	a.logf(i18n.T("路由配置：%s"), routeLabel(name))
 	a.saveRoutes()
 }
 

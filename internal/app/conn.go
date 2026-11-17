@@ -42,8 +42,8 @@ func (a *app) connect() {
 	}
 	if !node.Direct() {
 		if _, err := core.Binary(kind); err != nil {
-			a.hint(fmt.Sprintf(i18n.T("包里没有 %s，正在下载"), kind))
-			a.install()
+			a.fail(fmt.Sprintf(i18n.T("安装包里没有 %s，请重新下载完整安装包"), kind))
+			a.logf("%s", err)
 			return
 		}
 
@@ -81,12 +81,18 @@ func (a *app) launch(wait <-chan struct{}, prev running, kind core.Kind, node co
 
 	var kernel *core.Kernel
 	if !node.Direct() {
-		started, err := core.Start(kind, node, coreSocks, tun)
+		socks, err := freeAddr()
 		if err != nil {
-			a.update(func() {
-				if ticket != a.tries {
-					return
-				}
+			a.settle(ticket, func() {
+				a.busy = false
+				a.fail(err.Error())
+				a.logf("%s", err)
+			})
+			return
+		}
+		started, err := core.Start(kind, node, socks, tun)
+		if err != nil {
+			a.settle(ticket, func() {
 				a.busy = false
 				a.fail(err.Error())
 				a.logf(i18n.T("内核起不来：%s"), err)
@@ -96,22 +102,25 @@ func (a *app) launch(wait <-chan struct{}, prev running, kind core.Kind, node co
 		kernel = started
 	}
 	var local *proxy.Server
+	note := ""
 	if !tun {
 		var dialer proxy.Dialer = &net.Dialer{Timeout: 10 * time.Second}
 		if kernel != nil {
 			dialer = &proxy.Upstream{Addr: kernel.SocksAddr()}
 		}
-		opened, err := proxy.Listen(net.JoinHostPort("127.0.0.1", a.port), dialer)
+		opened, err := proxy.Listen(listenAddr(a.port), dialer)
+		if err != nil && a.port > 0 {
+			if opened, err = proxy.Listen("127.0.0.1:0", dialer); err == nil {
+				note = fmt.Sprintf(i18n.T("本地端口 %d 已被占用，这次改用 %s"), a.port, opened.Addr())
+			}
+		}
 		if err != nil {
 			if kernel != nil {
 				kernel.Stop()
 			}
-			a.update(func() {
-				if ticket != a.tries {
-					return
-				}
+			a.settle(ticket, func() {
 				a.busy = false
-				a.fail(fmt.Sprintf(i18n.T("本地端口 %s 起不来：%s"), a.port, err))
+				a.fail(err.Error())
 				a.logf("%s", err)
 			})
 			return
@@ -133,6 +142,9 @@ func (a *app) launch(wait <-chan struct{}, prev running, kind core.Kind, node co
 		a.local = local
 		a.stop = make(chan struct{})
 		a.notice = ""
+		if note != "" {
+			a.logf("%s", note)
+		}
 		if tun {
 			a.event(i18n.T("已连接：%s 接管全部流量"), node.Name)
 			if err := a.clearSysProxy(); err != nil {
@@ -182,14 +194,18 @@ func (a *app) disconnect() {
 	}
 	held := a.detach()
 	if held.local != nil || held.kernel != nil || held.stop != nil {
+		wait := a.drain
 		done := make(chan struct{})
 		a.drain = done
 		go func() {
+			if wait != nil {
+				<-wait
+			}
 			held.close()
 			close(done)
 		}()
 	}
-	a.up, a.down = 0, 0
+	a.upRaw, a.downRaw, a.upBase, a.downBase = 0, 0, 0, 0
 	a.conns = nil
 	if was {
 		a.event("%s", i18n.T("已断开"))
@@ -233,9 +249,24 @@ func (a *app) watch(stop <-chan struct{}, local *proxy.Server, kernel *core.Kern
 				}
 			}
 			a.update(func() {
-				a.up, a.down = up, down
+				a.upRaw, a.downRaw = up, down
 				a.conns = conns
 			})
 		}
 	}
+}
+
+func listenAddr(port int) string {
+	if port <= 0 {
+		return "127.0.0.1:0"
+	}
+	return net.JoinHostPort("127.0.0.1", fmt.Sprint(port))
+}
+
+func (a *app) settle(ticket int, fn func()) {
+	a.update(func() {
+		if ticket == a.tries {
+			fn()
+		}
+	})
 }

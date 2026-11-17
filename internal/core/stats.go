@@ -31,6 +31,7 @@ func (k *Kernel) CloseConnections() error {
 	if err != nil {
 		return err
 	}
+	req.Header.Set("Authorization", "Bearer "+k.secret)
 	resp, err := (&http.Client{Timeout: 2 * time.Second}).Do(req)
 	if err != nil {
 		return err
@@ -49,7 +50,12 @@ func (k *Kernel) Sessions() (up, down int64, list []Conn, err error) {
 		return 0, 0, nil, fmt.Errorf(i18n.T("%s 不提供会话列表"), k.kind)
 	}
 	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get("http://" + addr + "/connections")
+	req, err := http.NewRequest(http.MethodGet, "http://"+addr+"/connections", nil)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+k.secret)
+	resp, err := client.Do(req)
 	if err != nil {
 		return 0, 0, nil, err
 	}

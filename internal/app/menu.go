@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo"
@@ -22,10 +23,10 @@ func (a *app) menuBar(c *ui.Context, t *ui.Theme) {
 		ui.MenuButton(c, i18n.T("帮助"), func(m *ui.Menu) { a.helpMenu(m) })
 		ui.Box(c).Grow(1)
 		ui.Row(c).Gap(gapLoose).AlignItems(ui.Center).Children(func() {
-			current := i18n.T(a.routes.Current)
+			current := routeLabel(a.routes.Current)
 			if ui.Select(c, &current, a.routingNames()).Width(controlWide).Changed() {
 				for _, item := range a.routes.Items {
-					if i18n.T(item.Name) == current {
+					if routeLabel(item.Name) == current {
 						a.selectRouting(item.Name)
 						break
 					}
@@ -34,9 +35,9 @@ func (a *app) menuBar(c *ui.Context, t *ui.Theme) {
 			names := proxyNames()
 			want := proxyName(sysproxy.Mode(a.proxy))
 			if ui.Select(c, &want, names).Width(controlWider).Disabled(a.tun && a.connected()).Changed() {
-				a.proxy = string(sysproxy.Modes[indexOf(names, want)])
-				a.applySysProxy()
-				a.saveSettings()
+				if at := slices.Index(names, want); at >= 0 {
+					a.setProxyMode(string(sysproxy.Modes[at]))
+				}
 			}
 			tun := ui.Toggle(c, &a.tun, "TUN").Tooltip(i18n.T("TUN 接管全部流量"))
 			if !admin() {
@@ -48,9 +49,9 @@ func (a *app) menuBar(c *ui.Context, t *ui.Theme) {
 		})
 
 		ui.MenuButton(c, a.kernelLabel(), func(m *ui.Menu) { a.kernelMenu(c, m) }).
-			Disabled(a.connected() || a.installing != "" || a.updating)
+			Disabled(a.connected() || a.updating)
 		if a.installNeeded() {
-			if ui.Button(c, i18n.T("下载")).Clicked() {
+			if ui.Button(c, i18n.T("检查内核")).Clicked() {
 				a.install()
 			}
 		} else if a.latest != "" {
@@ -174,7 +175,7 @@ func (a *app) subscribeMenu(_ *ui.Context, m *ui.Menu) {
 	if m.Item(i18n.T("更新订阅")).Disabled(running == nil || a.subBusy).Chosen() {
 		a.refresh(running.Name)
 	}
-	if m.Item(i18n.T("更新订阅（通过代理）")).Disabled(running == nil || a.subBusy || !a.connected()).Chosen() {
+	if m.Item(i18n.T("更新订阅（通过代理）")).Disabled(running == nil || a.subBusy || a.local == nil).Chosen() {
 		a.refreshProxied(running.Name)
 
 	}
@@ -234,11 +235,8 @@ func (a *app) settingsMenu(c *ui.Context, m *ui.Menu) {
 	m.Separator()
 	m.Submenu(i18n.T("系统代理"), func(p *ui.Menu) {
 		for _, mode := range sysproxy.Modes {
-			name := string(mode)
-			if p.Item(proxyName(mode)).Radio(a.proxy == name).Chosen() {
-				a.proxy = name
-				a.applySysProxy()
-				a.saveSettings()
+			if p.Item(proxyName(mode)).Radio(a.proxy == string(mode)).Chosen() {
+				a.setProxyMode(string(mode))
 			}
 		}
 	})
@@ -253,6 +251,9 @@ func (a *app) settingsMenu(c *ui.Context, m *ui.Menu) {
 			a.openShortcuts()
 		}
 	})
+	if m.Item(fmt.Sprintf(i18n.T("本地端口（%s）"), listenLabel(a.port))).Chosen() {
+		a.openPort()
+	}
 	m.Separator()
 	m.Submenu(i18n.T("备份与还原"), func(p *ui.Menu) { a.backupMenu(c, p) })
 	if m.Item(i18n.T("打开数据目录")).Chosen() {
@@ -263,7 +264,7 @@ func (a *app) settingsMenu(c *ui.Context, m *ui.Menu) {
 	}
 	m.Separator()
 	if m.Item(i18n.T("清除流量统计")).Chosen() {
-		a.up, a.down = 0, 0
+		a.upBase, a.downBase = a.upRaw, a.downRaw
 		a.logf("%s", i18n.T("已清除流量统计"))
 	}
 	if !admin() {
@@ -320,16 +321,18 @@ func (a *app) importClipboard(c *ui.Context) {
 	a.say(fmt.Sprintf(i18n.T("已导入 %d 个节点"), len(nodes)))
 }
 
+var protocolDefaults = map[string]core.Node{
+	"socks":       {Port: 1080},
+	"http":        {Port: 1080},
+	"shadowsocks": {Method: "aes-256-gcm"},
+	"trojan":      {TLS: "tls"},
+}
+
 func (a *app) addProtocol(protocol string) {
-	a.draft = core.Node{Protocol: protocol, Port: 443}
-	if protocol == "socks" || protocol == "http" {
-		a.draft.Port = 1080
-	}
-	if protocol == "shadowsocks" {
-		a.draft.Method = "aes-256-gcm"
-	}
-	if protocol == "trojan" {
-		a.draft.TLS = "tls"
+	a.draft = protocolDefaults[protocol]
+	a.draft.Protocol = protocol
+	if a.draft.Port == 0 {
+		a.draft.Port = 443
 	}
 	a.draftPort = fmt.Sprint(a.draft.Port)
 	a.alterID = "0"
@@ -382,7 +385,6 @@ func (a *app) move(i, by int) {
 }
 
 func (a *app) save() {
-	a.rev++
 	a.prune()
 	if err := core.SaveNodes(a.nodes); err != nil {
 		a.fail(err.Error())

@@ -16,7 +16,7 @@ const (
 
 const detourTag = "detour"
 
-func Config(kind Kind, n Node, inbound string, policy Policy, clash, tun string) ([]byte, error) {
+func Config(kind Kind, n Node, inbound string, policy Policy, clash, secret, tun string) ([]byte, error) {
 	var config map[string]any
 	switch kind {
 	case SingBox:
@@ -52,7 +52,7 @@ func Config(kind Kind, n Node, inbound string, policy Policy, clash, tun string)
 			),
 
 			"experimental": map[string]any{
-				"clash_api": map[string]any{"external_controller": clash},
+				"clash_api": map[string]any{"external_controller": clash, "secret": secret},
 			},
 		}
 	case Xray:
@@ -92,6 +92,15 @@ func Config(kind Kind, n Node, inbound string, policy Policy, clash, tun string)
 	return json.Marshal(config)
 }
 
+func addRule(rules *[]any, base map[string]any, key string, value any) {
+	one := map[string]any{}
+	for k, v := range base {
+		one[k] = v
+	}
+	one[key] = value
+	*rules = append(*rules, one)
+}
+
 const (
 	tunTag       = "tun"
 	tunInterface = "TunGo"
@@ -99,7 +108,7 @@ const (
 	tunMTU       = 9000
 )
 
-func securityOf(n Node) string {
+func SecurityOf(n Node) string {
 	if n.TLS != "" && n.TLS != "none" {
 		return n.TLS
 	}
@@ -139,13 +148,6 @@ func serverName(n Node) string {
 		return n.ServerName
 	}
 	return n.Server
-}
-
-func hosts(n Node) []string {
-	if n.Host != "" {
-		return []string{n.Host}
-	}
-	return []string{serverName(n)}
 }
 
 func hostName(n Node) string {

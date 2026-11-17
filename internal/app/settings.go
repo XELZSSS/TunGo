@@ -1,16 +1,6 @@
 package app
 
-import (
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
-
-	"tungo/internal/appdir"
-	"tungo/internal/i18n"
-)
+import "tungo/internal/appdir"
 
 type settings struct {
 	Skipped   map[string]string `json:"skipped"`
@@ -18,25 +8,17 @@ type settings struct {
 	Theme     string            `json:"theme,omitempty"`
 	Lang      string            `json:"lang,omitempty"`
 	Proxy     string            `json:"proxy,omitempty"`
+	ProxyOn   string            `json:"proxyOn,omitempty"`
 	Tun       bool              `json:"tun,omitempty"`
+	Applied   string            `json:"applied,omitempty"`
+	Port      int               `json:"port,omitempty"`
 	Shortcuts map[string]string `json:"shortcuts,omitempty"`
 }
 
 func loadSettings() (settings, error) {
 	out := settings{Skipped: map[string]string{}}
-	path, err := settingsPath()
-	if err != nil {
+	if err := appdir.ReadJSON("settings.json", &out); err != nil {
 		return out, err
-	}
-	data, err := os.ReadFile(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return out, nil
-	}
-	if err != nil {
-		return out, err
-	}
-	if err := json.Unmarshal(data, &out); err != nil {
-		return out, fmt.Errorf(i18n.T("settings.json 解析失败：%w"), err)
 	}
 	if out.Skipped == nil {
 		out.Skipped = map[string]string{}
@@ -44,22 +26,4 @@ func loadSettings() (settings, error) {
 	return out, nil
 }
 
-func (s settings) save() error {
-	path, err := settingsPath()
-	if err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
-		return err
-	}
-	return appdir.WriteFile(path, data, 0o600)
-}
-
-func settingsPath() (string, error) {
-	d, err := appdir.Dir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(d, "settings.json"), nil
-}
+func (s settings) save() error { return appdir.WriteJSON("settings.json", s) }

@@ -21,14 +21,18 @@ func (a *app) regionMenu(_ *ui.Context, m *ui.Menu) {
 func (a *app) applyRegion(region string) {
 	label := region
 	if region != core.Regions[0] {
-		label = i18n.T("区域：") + i18n.T(region)
+		label = "区域：" + region
 	}
 	routing := core.RegionRouting(region)
 	a.routes.Put(label, routing)
 	a.routes.Current = label
 	a.logf(i18n.T("区域预置：%s（%d 条规则）"), i18n.T(region), len(routing.Rules))
-	a.saveRoutes()
-	go a.ensureRules(routing, false)
+	if err := core.SaveRoutingSet(a.routes); err != nil {
+		a.fail(err.Error())
+		a.logf("%s", err)
+		return
+	}
+	go a.ensureRules(routing, a.connected())
 }
 
 func (a *app) ensureRules(routing core.Routing, resume bool) {

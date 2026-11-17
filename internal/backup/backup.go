@@ -21,7 +21,7 @@ const keep = 10
 
 var files = []string{
 	"nodes.json", "subscription.json", "settings.json",
-	"routing.json", "dns.json", "mirrors.txt",
+	"routing.json", "dns.json",
 }
 
 func Dir() (string, error) {

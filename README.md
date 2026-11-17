@@ -23,4 +23,4 @@
 go tool mygo build -platform windows/amd64
 ```
 
-产物在 `build\windows-amd64\` sing-box、xray、`wintun.dll` 不入库，构建前放进 `resources/bin\`
+产物在 `build\windows-amd64\`，内核与规则集随包分发在 `resources\bin\`，可在「设置 → 内核」里更新

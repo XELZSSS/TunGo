@@ -11,7 +11,7 @@ import (
 func (a *app) kernelKind() core.Kind { return core.PickKind(core.Kind(a.kind), a.node()) }
 
 func (a *app) kernelLabel() string {
-	if a.installing != "" || a.updating {
+	if a.updating {
 		return i18n.T("下载中") + " " + a.installAt
 	}
 	kind := a.kernelKind()
@@ -22,7 +22,7 @@ func (a *app) kernelLabel() string {
 	if a.kind == string(core.Auto) {
 		label = fmt.Sprintf(i18n.T("自动：%s"), kind)
 	}
-	if a.installNeeded() {
+	if !a.installed(kind) {
 		return label + " " + i18n.T("未安装")
 	}
 	if a.latest != "" && a.versionFor == kind {
@@ -112,7 +112,7 @@ func (a *app) upgrade() {
 	kind := a.kernelKind()
 	tag := a.latest
 	running := a.connected()
-	system := a.applied
+	system := a.applied != ""
 
 	if running {
 		a.disconnect()
@@ -142,7 +142,6 @@ func (a *app) upgrade() {
 				back()
 				return
 			}
-			a.have = nil
 			a.latest = ""
 			a.versionFor = ""
 			a.know(kind)
@@ -153,47 +152,31 @@ func (a *app) upgrade() {
 }
 
 func (a *app) install() {
-	if a.installing != "" {
+	kind := a.kernelKind()
+	if a.installed(kind) {
+		a.say(fmt.Sprintf(i18n.T("%s 已就绪，可以连接了"), kind))
 		return
 	}
-	kind := a.kernelKind()
-	name := string(kind)
-	a.installing = name
-	a.installAt = ""
-	a.event(i18n.T("开始下载 %s"), name)
-	go func() {
-		_, err := core.Ensure(kind, func(part, whole int64) {
-			a.update(func() { a.installAt = size(part) + " / " + size(whole) })
-		})
-		a.update(func() {
-			a.installing = ""
-			if err != nil {
-				a.fail(err.Error())
-				a.logf(i18n.T("%s 下载失败：%s"), name, err)
-				return
-			}
-			a.say(fmt.Sprintf(i18n.T("%s 已装好，可以连接了"), name))
-			a.have = nil
-			a.versionFor = ""
-			a.know(kind)
-			a.event(i18n.T("%s 已装好"), name)
-		})
-	}()
+	a.fail(fmt.Sprintf(i18n.T("安装包里没有 %s，请重新下载完整安装包"), kind))
+	a.logf(i18n.T("找不到 %s：安装包应当带着它，也可以放进 %s"), kind, binHint())
+}
+
+func (a *app) installed(kind core.Kind) bool {
+	_, err := core.Binary(kind)
+	return err == nil
 }
 
 func (a *app) installNeeded() bool {
-	if len(a.nodes) == 0 || a.node().Direct() || a.connected() || a.installing != "" {
+	if len(a.nodes) == 0 || a.node().Direct() || a.connected() {
 		return false
 	}
-	kind := a.kernelKind()
-	if a.have == nil {
-		a.have = map[core.Kind]bool{}
+	return !a.installed(a.kernelKind())
+}
+
+func binHint() string {
+	dir, err := core.BinDir()
+	if err != nil {
+		return i18n.T("安装目录的 bin 下")
 	}
-	installed, known := a.have[kind]
-	if !known {
-		_, err := core.Binary(kind)
-		installed = err == nil
-		a.have[kind] = installed
-	}
-	return !installed
+	return dir
 }

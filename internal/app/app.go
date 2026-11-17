@@ -3,7 +3,6 @@ package app
 import (
 	"fmt"
 	"log"
-	"net"
 	"time"
 
 	"tungo/internal/core"
@@ -11,11 +10,6 @@ import (
 	"tungo/internal/logs"
 	"tungo/internal/sub"
 	"tungo/internal/sysproxy"
-)
-
-const (
-	appPort   = "10809"
-	coreSocks = "127.0.0.1:10810"
 )
 
 const probeAddr = "1.1.1.1:443"
@@ -40,28 +34,18 @@ type app struct {
 }
 
 func newApp() *app {
-	if err := core.WriteMirrors(); err != nil {
-		log.Print("no mirrors: ", err)
-	}
+
 	if err := core.CleanRun(); err != nil {
 		log.Print("no clean run: ", err)
 	}
-	remembered, recallErr := loadSettings()
-	i18n.Set(remembered.Lang)
-	nodes, at, err := core.LoadNodes()
-	routes, routeErr := core.LoadRoutingSet()
 	a := &app{
-		shell:         shell{themeName: "light"},
-		lists:         lists{panePct: 65},
-		servers:       servers{nodes: nodes, nodesAt: at, kind: string(core.Auto), port: appPort, ms: make([]int, len(nodes)), speed: make([]float64, len(nodes))},
-		subscriptions: subscriptions{subs: sub.Load()},
-		routing:       routing{routes: routes},
-		link:          link{proxy: string(sysproxy.ModeSet)},
-	}
-	for i := range a.ms {
-		a.ms[i] = -1
+		shell:   shell{themeName: "light"},
+		lists:   lists{panePct: 65},
+		servers: servers{kind: string(core.Auto)},
+		link:    link{proxy: string(sysproxy.ModeSet), proxyOn: string(sysproxy.ModeSet)},
 	}
 	a.list.Selected = &a.row
+	a.rowAt = -1
 	a.list.RowHeight = tableRowHeight
 	a.connList.RowHeight = tableRowHeight
 	a.connList.Key = func(row int) any {
@@ -70,6 +54,33 @@ func newApp() *app {
 		}
 		return a.conns[row].ID
 	}
+	if err := a.loadAll(); err != nil {
+		a.fail(err.Error())
+		a.logf("%s", err)
+	}
+	a.event(i18n.T("TunGo 启动，%d 个节点"), len(a.nodes))
+	return a
+}
+
+func (a *app) loadAll() error {
+	remembered, err := loadSettings()
+	if err != nil {
+		return err
+	}
+	i18n.Set(remembered.Lang)
+	nodes, at, err := core.LoadNodes()
+	if err != nil {
+		return err
+	}
+	routes, err := core.LoadRoutingSet()
+	if err != nil {
+		return err
+	}
+	a.nodesAt = at
+	a.setNodes(nodes)
+	a.chosen = 0
+	a.subs = sub.Load()
+	a.routes = routes
 	a.skipped, a.shortcuts = remembered.Skipped, remembered.Shortcuts
 	if remembered.Kind != "" {
 		a.kind = remembered.Kind
@@ -77,25 +88,23 @@ func newApp() *app {
 	if remembered.Theme != "" {
 		a.themeName = remembered.Theme
 	}
-
-	if remembered.Proxy != "" && remembered.Proxy != string(sysproxy.ModeClear) {
+	if remembered.Proxy != "" {
 		a.proxy = remembered.Proxy
 	}
+	if remembered.ProxyOn != "" {
+		a.proxyOn = remembered.ProxyOn
+	}
 	a.tun = remembered.Tun
-	if err != nil {
-		a.fail(err.Error())
-		a.logf("%s", err)
+	a.port = remembered.Port
+	a.applied = remembered.Applied
+	if a.applied != "" {
+		if err := sysproxy.Clear(); err == nil {
+			a.applied = ""
+			a.saveSettings()
+			a.logf("%s", i18n.T("上次的系统代理没清干净，已还原"))
+		}
 	}
-	if routeErr != nil {
-		a.fail(routeErr.Error())
-		a.logf("%s", routeErr)
-	}
-	if recallErr != nil {
-		a.fail(recallErr.Error())
-		a.logf("%s", recallErr)
-	}
-	a.event(i18n.T("TunGo 启动，%d 个节点"), len(nodes))
-	return a
+	return nil
 }
 
 func (a *app) node() core.Node {
@@ -125,10 +134,10 @@ func (a *app) resolved(n core.Node) core.Node {
 func (a *app) connected() bool { return a.local != nil || a.kernel != nil }
 
 func (a *app) localAddr() string {
-	if a.local != nil {
-		return a.local.Addr()
+	if a.local == nil {
+		return ""
 	}
-	return net.JoinHostPort("127.0.0.1", a.port)
+	return a.local.Addr()
 }
 
 func (a *app) event(format string, args ...any) { a.record(true, format, args...) }
@@ -158,7 +167,9 @@ func (a *app) openLogs() {
 func (a *app) saveSettings() {
 	saved := settings{
 		Skipped: a.skipped, Kind: a.kind, Theme: a.themeName, Lang: i18n.Lang(),
-		Proxy: a.proxy, Tun: a.tun, Shortcuts: a.shortcuts,
+		Proxy: a.proxy, ProxyOn: a.proxyOn, Tun: a.tun, Shortcuts: a.shortcuts,
+		Applied: a.applied,
+		Port:    a.port,
 	}
 	if err := saved.save(); err != nil {
 		a.logf(i18n.T("保存设置失败：%s"), err)
@@ -221,7 +232,6 @@ func (a *app) appendNodes(nodes ...core.Node) {
 		a.speed = append(a.speed, 0)
 	}
 	a.nodes = append(a.nodes, nodes...)
-	a.rev++
 }
 
 func (a *app) dropNode(i int) {
@@ -233,14 +243,12 @@ func (a *app) dropNode(i int) {
 	} else if a.chosen > i {
 		a.chosen--
 	}
-	a.rev++
 }
 
 func (a *app) swapNodes(i, to int) {
 	a.nodes[i], a.nodes[to] = a.nodes[to], a.nodes[i]
 	a.ms[i], a.ms[to] = a.ms[to], a.ms[i]
 	a.speed[i], a.speed[to] = a.speed[to], a.speed[i]
-	a.rev++
 }
 
 func (a *app) setNodes(nodes []core.Node) {
@@ -250,5 +258,4 @@ func (a *app) setNodes(nodes []core.Node) {
 	for i := range a.ms {
 		a.ms[i] = -1
 	}
-	a.rev++
 }

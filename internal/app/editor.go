@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -24,6 +23,7 @@ func (a *app) overlays(c *ui.Context) {
 	a.subForm(c)
 	a.subEditForm(c)
 	a.shortcutForm(c)
+	a.portForm(c)
 	a.policyForms(c)
 }
 
@@ -172,20 +172,27 @@ func (a *app) commit() {
 	} else {
 		a.draft.AlterID = 0
 	}
-	if a.alpn != "" {
-		a.draft.ALPN = nil
-		for _, part := range strings.Split(a.alpn, ",") {
-			if part = strings.TrimSpace(part); part != "" {
-				a.draft.ALPN = append(a.draft.ALPN, part)
-			}
-		}
-	}
+	a.draft.ALPN = core.ParseList(a.alpn)
 	a.draft.Detour = a.detourOf()
 	a.draft.Raw = strings.TrimSpace(a.rawText)
 	if a.draft.Protocol == "direct" {
-		a.draft = directNode()
+		direct := directNode()
+		if a.draft.Name != "" {
+			direct.Name = a.draft.Name
+		}
+		direct.Sub = a.draft.Sub
+		a.draft = direct
 	}
-	if at := a.indexOfNode(a.draftWas); at >= 0 {
+	at := a.indexOfNode(a.draftWas)
+	if a.draft.Name != "" {
+		for i, node := range a.nodes {
+			if i != at && node.Name == a.draft.Name {
+				a.fail(i18n.T("已有同名节点"))
+				return
+			}
+		}
+	}
+	if at >= 0 {
 		a.nodes[at] = a.draft
 	} else {
 		a.appendNodes(a.draft)
@@ -324,21 +331,25 @@ func (a *app) removeSub(name string) {
 	if a.subs.Item(name) == nil {
 		return
 	}
-	was := len(a.nodes)
+	was := a.node()
 	kept := make([]core.Node, 0, len(a.nodes))
+	removed := 0
 	for _, node := range a.nodes {
 		if node.Sub != name {
 			kept = append(kept, node)
+			continue
 		}
+		removed++
 	}
 	a.setNodes(kept)
-	if a.chosen >= len(a.nodes) {
-		a.chosen = 0
+	a.chosen = 0
+	if at := a.indexOfNode(was); at >= 0 {
+		a.chosen = at
 	}
 	a.subs.Remove(name)
 	a.save()
 	a.saveSubs()
-	a.logf(i18n.T("已删除订阅：%s（%d 个节点）"), name, was-len(kept))
+	a.logf(i18n.T("已删除订阅：%s（%d 个节点）"), name, removed)
 }
 
 func intervalName(minutes int) string {
@@ -392,34 +403,4 @@ func (a *app) rebootAsAdmin() {
 	a.logf("%s", i18n.T("已请求以管理员身份重启"))
 	a.quitting = true
 	mygo.App.Quit()
-}
-
-func (a *app) refreshProxied(name string) {
-	item := a.subs.Item(name)
-	if item == nil || a.subBusy || !a.connected() {
-		return
-	}
-	from := item.URL
-	addr := a.localAddr()
-	a.subBusy = true
-	a.subNote = i18n.T("正在通过代理更新订阅")
-	a.logf("%s", a.subNote)
-	go func() {
-		nodes, err := sub.FetchProxied(from, addr)
-		a.update(func() {
-			a.subBusy = false
-			if err != nil {
-				a.subNote = err.Error()
-				a.logf(i18n.T("订阅失败：%s"), err)
-				return
-			}
-			a.replaceNodes(name, nodes)
-			if kept := a.subs.Item(name); kept != nil {
-				kept.Updated = time.Now()
-			}
-			a.subNote = fmt.Sprintf(i18n.T("已更新：%d 个节点"), len(nodes))
-			a.logf(i18n.T("订阅更新（%s，经代理）：%d 个节点"), name, len(nodes))
-			a.saveSubs()
-		})
-	}()
 }

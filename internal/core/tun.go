@@ -14,47 +14,40 @@ const (
 func cleanTun() {
 	resetTun()
 	deadline := time.Now().Add(tunClearTimeout)
-	for tunPresent() {
-		if time.Now().After(deadline) {
+	for {
+		if present, _ := tunState(tunInterface); !present || time.Now().After(deadline) {
 			return
 		}
 		time.Sleep(tunProbe)
 	}
 }
 
-func tunPresent() bool {
-	interfaces, err := net.Interfaces()
-	if err != nil {
-		return false
-	}
-	for _, one := range interfaces {
-		if strings.HasPrefix(one.Name, tunInterface) {
-			return true
-		}
-	}
-	return false
-}
-
 func waitTun(k *Kernel, name string, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
-	for !tunUp(name) {
+	for {
+		if _, up := tunState(name); up {
+			return true
+		}
 		if k.exited() || time.Now().After(deadline) {
 			return false
 		}
 		time.Sleep(tunProbe)
 	}
-	return true
 }
 
-func tunUp(name string) bool {
+func tunState(name string) (present, up bool) {
 	interfaces, err := net.Interfaces()
 	if err != nil {
-		return false
+		return false, false
 	}
 	for _, one := range interfaces {
-		if strings.HasPrefix(one.Name, name) && one.Flags&net.FlagUp != 0 {
-			return true
+		if !strings.HasPrefix(one.Name, name) {
+			continue
+		}
+		present = true
+		if one.Flags&net.FlagUp != 0 {
+			up = true
 		}
 	}
-	return false
+	return present, up
 }

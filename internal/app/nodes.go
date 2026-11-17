@@ -1,9 +1,10 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
 	"net"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -24,34 +25,9 @@ func (a *app) choose(i int) {
 	}
 }
 
-func (a *app) refresh(name string) {
-	item := a.subs.Item(name)
-	if item == nil || a.subBusy {
-		return
-	}
-	from := item.URL
-	a.subBusy = true
-	a.subNote = i18n.T("正在更新订阅")
-	a.event(i18n.T("正在更新订阅：%s"), name)
-	go func() {
-		nodes, err := sub.Fetch(from)
-		a.update(func() {
-			a.subBusy = false
-			if err != nil {
-				a.subNote = err.Error()
-				a.logf(i18n.T("订阅失败：%s"), err)
-				return
-			}
-			a.replaceNodes(name, nodes)
-			if kept := a.subs.Item(name); kept != nil {
-				kept.Updated = time.Now()
-			}
-			a.subNote = fmt.Sprintf(i18n.T("已更新：%d 个节点"), len(nodes))
-			a.logf(i18n.T("订阅更新（%s）：%d 个节点"), name, len(nodes))
-			a.saveSubs()
-		})
-	}()
-}
+func (a *app) refresh(name string) { a.pullSubs([]string{name}, false) }
+
+func (a *app) refreshProxied(name string) { a.pullSubs([]string{name}, true) }
 
 func (a *app) replaceNodes(name string, nodes []core.Node) {
 	for i := range nodes {
@@ -98,7 +74,7 @@ func (a *app) autoUpdate() {
 					due = append(due, item.Name)
 				}
 			}
-			a.updateSubs(due)
+			a.pullSubs(due, false)
 		})
 	}
 }
@@ -109,13 +85,12 @@ func (a *app) probe() {
 	}
 	a.logf("%s", i18n.T("开始测速"))
 	gate := make(chan struct{}, probeWorkers)
-	for i, node := range a.nodes {
-		addr := nodeAddr(node)
-		go func(i int, addr string) {
+	for _, node := range a.nodes {
+		go func() {
 			gate <- struct{}{}
-			a.pingAt(i, addr)
-			<-gate
-		}(i, addr)
+			defer func() { <-gate }()
+			a.pingAt(node)
+		}()
 	}
 }
 
@@ -123,7 +98,7 @@ func (a *app) pingNode(i int) {
 	if i < 0 || i >= len(a.nodes) {
 		return
 	}
-	go a.pingAt(i, nodeAddr(a.nodes[i]))
+	go a.pingAt(a.nodes[i])
 }
 
 func nodeAddr(node core.Node) string {
@@ -133,60 +108,35 @@ func nodeAddr(node core.Node) string {
 	return net.JoinHostPort(node.Server, fmt.Sprint(node.Port))
 }
 
-func (a *app) pingAt(i int, addr string) {
+func (a *app) pingAt(node core.Node) {
 	start := time.Now()
 	ms := -1
-	if conn, err := net.DialTimeout("tcp", addr, 3*time.Second); err == nil {
+	if conn, err := net.DialTimeout("tcp", nodeAddr(node), 3*time.Second); err == nil {
 		conn.Close()
 		ms = int(time.Since(start).Milliseconds())
 	}
 	a.update(func() {
-		if i < len(a.ms) {
-			a.ms[i] = ms
-			a.rev++
+		if at := a.indexOfNode(node); at >= 0 {
+			a.ms[at] = ms
 		}
 	})
 }
 
-func indexOf(list []string, want string) int {
-	for i, one := range list {
-		if one == want {
-			return i
-		}
-	}
-	return -1
-}
-
 func (a *app) groupNames() []string {
-	key := groupsKey{rev: a.rev, lang: i18n.Lang()}
-	if a.groups != nil && key == a.groupsAt {
-		return a.groups
-	}
 	names := []string{i18n.T("全部")}
 	seen := map[string]bool{}
 	for _, node := range a.nodes {
-		name := groupName(node)
-		if seen[name] {
+		name := node.Sub
+		if name == "" || seen[name] {
 			continue
 		}
 		seen[name] = true
 		names = append(names, name)
 	}
-	if a.group != "" && !seen[a.group] {
-		a.group = ""
-	}
-	a.groupsAt, a.groups = key, names
 	return names
 }
 
 func (a *app) syncRows() {
-	key := rowsKey{rev: a.rev, group: a.group}
-	if order := a.list.Sort; order != nil {
-		key.column, key.descending = order.Column, order.Descending
-	}
-	if a.shown != nil && key == a.rowsAt {
-		return
-	}
 	shown := a.shown[:0]
 	for i, node := range a.nodes {
 		if a.group != "" && groupName(node) != a.group {
@@ -196,7 +146,6 @@ func (a *app) syncRows() {
 	}
 	a.shown = shown
 	a.sortRows()
-	a.rowsAt = key
 }
 
 func (a *app) rowOf(node int) int {
@@ -213,24 +162,28 @@ func (a *app) sortRows() {
 	if order == nil || order.Column == "" || len(a.shown) < 2 {
 		return
 	}
-	sort.SliceStable(a.shown, func(i, j int) bool {
-		one, other := a.shown[i], a.shown[j]
-		var less, greater bool
+	slices.SortStableFunc(a.shown, func(one, other int) int {
+		var by int
 		if order.Column == "name" {
-			x, y := strings.ToLower(a.nodes[one].Name), strings.ToLower(a.nodes[other].Name)
-			less, greater = x < y, x > y
+			by = strings.Compare(strings.ToLower(a.nodes[one].Name), strings.ToLower(a.nodes[other].Name))
 		} else {
 			x, known := a.sortKey(one, order.Column)
 			y, otherKnown := a.sortKey(other, order.Column)
 			if !known || !otherKnown {
-				return known && !otherKnown
+				switch {
+				case known:
+					return -1
+				case otherKnown:
+					return 1
+				}
+				return 0
 			}
-			less, greater = x < y, x > y
+			by = cmp.Compare(x, y)
 		}
 		if order.Descending {
-			return greater
+			return -by
 		}
-		return less
+		return by
 	})
 }
 
@@ -249,9 +202,6 @@ func (a *app) sortKey(at int, column string) (int64, bool) {
 }
 
 func groupName(node core.Node) string {
-	if node.Sub == "" {
-		return i18n.T("手动")
-	}
 	return node.Sub
 }
 
@@ -326,8 +276,9 @@ func security(node core.Node) string {
 }
 
 func sameNode(one, other core.Node) bool {
-	return one.Name == other.Name && one.Server == other.Server &&
-		one.Port == other.Port && one.UUID == other.UUID && one.Password == other.Password
+	return one.Name == other.Name && one.Protocol == other.Protocol && one.Role == other.Role &&
+		one.Server == other.Server && one.Port == other.Port &&
+		one.UUID == other.UUID && one.Password == other.Password
 }
 
 func (a *app) refreshAll() {
@@ -335,11 +286,11 @@ func (a *app) refreshAll() {
 	for _, item := range a.subs.Items {
 		names = append(names, item.Name)
 	}
-	a.updateSubs(names)
+	a.pullSubs(names, false)
 }
 
-func (a *app) updateSubs(names []string) {
-	if a.subBusy || len(names) == 0 {
+func (a *app) pullSubs(names []string, proxied bool) {
+	if a.subBusy {
 		return
 	}
 	type job struct{ name, url string }
@@ -352,48 +303,65 @@ func (a *app) updateSubs(names []string) {
 	if len(jobs) == 0 {
 		return
 	}
+	addr := a.localAddr()
+	if proxied && addr == "" {
+		return
+	}
 	a.subBusy = true
-	a.event("%s", i18n.T("正在更新订阅"))
+	if proxied {
+		a.subNote = i18n.T("正在通过代理更新订阅")
+		a.logf("%s", a.subNote)
+	} else {
+		a.subNote = i18n.T("正在更新订阅")
+		if len(jobs) == 1 {
+			a.event(i18n.T("正在更新订阅：%s"), jobs[0].name)
+		} else {
+			a.event("%s", a.subNote)
+		}
+	}
 	go func() {
-		defer a.update(func() { a.subBusy = false })
 		ok, failed := 0, 0
+		var lastErr error
 		for _, one := range jobs {
-			nodes, err := sub.Fetch(one.url)
+			var nodes []core.Node
+			var err error
+			if proxied {
+				nodes, err = sub.FetchProxied(one.url, addr)
+			} else {
+				nodes, err = sub.Fetch(one.url)
+			}
 			if err != nil {
 				failed++
-			} else {
-				ok++
+				lastErr = err
+				a.update(func() { a.logf(i18n.T("订阅失败（%s）：%s"), one.name, err) })
+				continue
 			}
+			ok++
 			a.update(func() {
-
+				a.replaceNodes(one.name, nodes)
 				if kept := a.subs.Item(one.name); kept != nil {
 					kept.Updated = time.Now()
 				}
-				if err != nil {
-					a.logf(i18n.T("订阅失败（%s）：%s"), one.name, err)
-					return
+				if proxied {
+					a.logf(i18n.T("订阅更新（%s，经代理）：%d 个节点"), one.name, len(nodes))
+				} else {
+					a.logf(i18n.T("订阅更新（%s）：%d 个节点"), one.name, len(nodes))
 				}
-				a.replaceNodes(one.name, nodes)
-				a.logf(i18n.T("订阅更新（%s）：%d 个节点"), one.name, len(nodes))
 			})
 		}
 		a.update(func() {
-			a.subNote = fmt.Sprintf(i18n.T("订阅已更新：%d 个成功，%d 个失败"), ok, failed)
+			a.subBusy = false
+			switch {
+			case lastErr != nil && len(jobs) == 1:
+				a.subNote = lastErr.Error()
+			case len(jobs) == 1:
+				a.subNote = fmt.Sprintf(i18n.T("已更新：%d 个节点"), ok)
+			default:
+				a.subNote = fmt.Sprintf(i18n.T("订阅已更新：%d 个成功，%d 个失败"), ok, failed)
+			}
 			a.saveSubs()
 		})
 	}()
 }
 
 const probeWorkers = 12
-
-type rowsKey struct {
-	rev        int
-	group      string
-	column     string
-	descending bool
-}
-
-type groupsKey struct {
-	rev  int
-	lang string
-}

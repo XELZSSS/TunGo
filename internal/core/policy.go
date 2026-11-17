@@ -1,17 +1,10 @@
 package core
 
 import (
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
 	"tungo/internal/appdir"
-	"tungo/internal/i18n"
 )
 
 type Rule struct {
@@ -101,10 +94,78 @@ func (r Rule) Bare() bool {
 
 func DefaultDNS() DNS {
 	return DNS{
-		Remote:   "https://1.1.1.1/dns-query",
-		Direct:   "223.5.5.5",
-		Strategy: "prefer_ipv4",
+		Remote:    "https://1.1.1.1/dns-query",
+		Direct:    "https://223.5.5.5/dns-query",
+		Bootstrap: "https://8.8.8.8/dns-query",
+		Strategy:  "prefer_ipv4",
 	}
+}
+
+type DNSPreset struct {
+	Name      string
+	Remote    string
+	Direct    string
+	Bootstrap string
+}
+
+var DNSPresets = []DNSPreset{
+	{
+		Name:      "Cloudflare",
+		Remote:    "https://1.1.1.1/dns-query",
+		Direct:    "https://223.5.5.5/dns-query",
+		Bootstrap: "https://8.8.8.8/dns-query",
+	},
+	{
+		Name:      "Google",
+		Remote:    "https://8.8.8.8/dns-query",
+		Direct:    "https://223.5.5.5/dns-query",
+		Bootstrap: "https://1.1.1.1/dns-query",
+	},
+	{
+		Name:      "Quad9",
+		Remote:    "https://9.9.9.9/dns-query",
+		Direct:    "https://223.5.5.5/dns-query",
+		Bootstrap: "https://1.1.1.1/dns-query",
+	},
+	{
+		Name:      "AdGuard",
+		Remote:    "https://94.140.14.14/dns-query",
+		Direct:    "https://223.5.5.5/dns-query",
+		Bootstrap: "https://1.1.1.1/dns-query",
+	},
+	{
+		Name:      "阿里 DoH",
+		Remote:    "https://223.5.5.5/dns-query",
+		Direct:    "https://223.5.5.5/dns-query",
+		Bootstrap: "https://8.8.8.8/dns-query",
+	},
+	{
+		Name:      "腾讯 DoH",
+		Remote:    "https://1.12.12.12/dns-query",
+		Direct:    "https://1.12.12.12/dns-query",
+		Bootstrap: "https://8.8.8.8/dns-query",
+	},
+	{
+		Name:      "阿里明文",
+		Remote:    "223.5.5.5",
+		Direct:    "223.5.5.5",
+		Bootstrap: "223.5.5.5",
+	},
+	{
+		Name:      "腾讯明文",
+		Remote:    "119.29.29.29",
+		Direct:    "119.29.29.29",
+		Bootstrap: "119.29.29.29",
+	},
+}
+
+func DNSPresetOf(dns DNS) string {
+	for _, one := range DNSPresets {
+		if one.Remote == dns.Remote && one.Direct == dns.Direct && one.Bootstrap == dns.Bootstrap {
+			return one.Name
+		}
+	}
+	return ""
 }
 
 type Policy struct {
@@ -144,7 +205,7 @@ func DefaultRoutingSet() RoutingSet {
 
 func LoadRoutingSet() (RoutingSet, error) {
 	var set RoutingSet
-	err := read("routing.json", &set)
+	err := appdir.ReadJSON("routing.json", &set)
 	if len(set.Items) == 0 {
 		set = DefaultRoutingSet()
 	}
@@ -154,7 +215,7 @@ func LoadRoutingSet() (RoutingSet, error) {
 	return set, err
 }
 
-func SaveRoutingSet(set RoutingSet) error { return writePolicy("routing.json", set) }
+func SaveRoutingSet(set RoutingSet) error { return appdir.WriteJSON("routing.json", set) }
 
 func (s RoutingSet) Item(name string) *Routing {
 	for i := range s.Items {
@@ -208,49 +269,11 @@ func LoadRouting() (Routing, error) {
 
 func LoadDNS() (DNS, error) {
 	dns := DefaultDNS()
-	err := read("dns.json", &dns)
+	err := appdir.ReadJSON("dns.json", &dns)
 	return dns, err
 }
 
-func SaveDNS(dns DNS) error { return writePolicy("dns.json", dns) }
-
-func read(name string, v any) error {
-	path, err := policyPath(name)
-	if err != nil {
-		return err
-	}
-	data, err := os.ReadFile(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(data, v); err != nil {
-		return fmt.Errorf(i18n.T("%s 解析失败：%w"), name, err)
-	}
-	return nil
-}
-
-func writePolicy(name string, v any) error {
-	path, err := policyPath(name)
-	if err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		return err
-	}
-	return appdir.WriteFile(path, data, 0o600)
-}
-
-func policyPath(name string) (string, error) {
-	dir, err := appdir.Dir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, name), nil
-}
+func SaveDNS(dns DNS) error { return appdir.WriteJSON("dns.json", dns) }
 
 func List(values []string) string { return strings.Join(values, "\n") }
 

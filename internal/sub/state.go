@@ -1,9 +1,6 @@
 package sub
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"time"
 
 	"tungo/internal/appdir"
@@ -23,29 +20,11 @@ type State struct {
 
 func Load() State {
 	var state State
-	path, err := path()
-	if err != nil {
-		return state
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return state
-	}
-	json.Unmarshal(data, &state)
+	_ = appdir.ReadJSON("subscription.json", &state)
 	return state
 }
 
-func Save(state State) error {
-	path, err := path()
-	if err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(state, "", "  ")
-	if err != nil {
-		return err
-	}
-	return appdir.WriteFile(path, data, 0o600)
-}
+func Save(state State) error { return appdir.WriteJSON("subscription.json", state) }
 
 func (s State) Item(name string) *Item {
 	for i := range s.Items {
@@ -88,12 +67,4 @@ func (s *State) Remove(name string) {
 			s.Current = s.Items[0].Name
 		}
 	}
-}
-
-func path() (string, error) {
-	d, err := appdir.Dir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(d, "subscription.json"), nil
 }

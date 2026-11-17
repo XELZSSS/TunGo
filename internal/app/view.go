@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"slices"
 	"strings"
 	"time"
 
@@ -45,17 +46,14 @@ func (a *app) table(c *ui.Context, t *ui.Theme) {
 		a.emptyPane(c, t, i18n.T("还没有节点：从「服务器」导入分享链接，或设置订阅"))
 		return
 	}
-	if a.rowAt < 0 {
+	if a.row < 0 || a.row >= len(a.shown) {
+		a.row, a.rowAt = 0, 0
+	}
+	if a.rowAt < 0 || a.row == a.rowAt && a.shown[a.row] != a.chosen {
 		if at := a.rowOf(a.chosen); at >= 0 {
 			a.row = at
 		}
 		a.rowAt = a.row
-	}
-	if a.row < 0 {
-		a.row = 0
-	}
-	if a.row >= len(a.shown) {
-		a.row = len(a.shown) - 1
 	}
 	ui.Themed(c, listTheme(t)).Grow(1).Children(func() {
 		ui.Table(c, &a.list, []ui.TableColumn{
@@ -90,7 +88,7 @@ func (a *app) table(c *ui.Context, t *ui.Theme) {
 					case 5:
 						muted(c, t, strategyName(node.StrategyOr()))
 					case 6:
-						muted(c, t, groupName(node))
+						muted(c, t, node.Sub)
 					case 7:
 						a.delay(c, t, at)
 					case 8:
@@ -116,7 +114,7 @@ func (a *app) table(c *ui.Context, t *ui.Theme) {
 				case 5:
 					muted(c, t, security(node))
 				case 6:
-					muted(c, t, groupName(node))
+					muted(c, t, node.Sub)
 				case 7:
 					a.delay(c, t, at)
 				case 8:
@@ -125,7 +123,7 @@ func (a *app) table(c *ui.Context, t *ui.Theme) {
 			})
 			cell.ContextMenu(func(m *ui.Menu) { a.nodeMenu(m, at) })
 			if cell.RowDoubleClicked() {
-				a.rowAt = row
+				a.row, a.rowAt = row, row
 				a.choose(at)
 				if !a.connected() {
 					a.connect()
@@ -337,9 +335,10 @@ func (a *app) toolBar(c *ui.Context, t *ui.Theme) {
 			a.connect()
 		}
 		groups := a.groupNames()
-		at := indexOf(groups, a.group)
+		at := slices.Index(groups, a.group)
 		if at < 0 {
 			at = 0
+			a.group = ""
 		}
 		if ui.Segmented(c, &at, groups...).Changed() {
 			a.group = ""
@@ -349,21 +348,6 @@ func (a *app) toolBar(c *ui.Context, t *ui.Theme) {
 			a.rowAt = -1
 		}
 	})
-}
-
-func (a *app) titleNode() string {
-	if !a.connected() {
-		return ""
-	}
-	return ellipsis(a.node().Name, 40)
-}
-
-func ellipsis(text string, n int) string {
-	runes := []rune(text)
-	if len(runes) <= n {
-		return text
-	}
-	return string(runes[:n-1]) + "…"
 }
 
 func (a *app) inbound() string {
@@ -379,9 +363,16 @@ func (a *app) inbound() string {
 func (a *app) routingNames() []string {
 	names := make([]string, len(a.routes.Items))
 	for i, item := range a.routes.Items {
-		names[i] = i18n.T(item.Name)
+		names[i] = routeLabel(item.Name)
 	}
 	return names
+}
+
+func routeLabel(name string) string {
+	if region, ok := strings.CutPrefix(name, "区域："); ok {
+		return i18n.T("区域：") + i18n.T(region)
+	}
+	return i18n.T(name)
 }
 
 func (a *app) status() string {
@@ -411,7 +402,7 @@ func (a *app) statusBar(c *ui.Context, t *ui.Theme) {
 		} else if a.subNote != "" {
 			muted(c, t, a.subNote)
 		}
-		traffic(c, t, a.up, a.down)
+		traffic(c, t, a.upRaw-a.upBase, a.downRaw-a.downBase)
 	})
 }
 

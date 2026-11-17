@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -89,7 +90,9 @@ func (a *app) ready() {
 		StateKey: "main",
 		Content:  ui.View(a.view),
 	})
-	if err := a.win.SetIcon(appIcon(256)); err != nil {
+	if icon, err := appIcon(256); err != nil {
+		log.Print("no window icon: ", err)
+	} else if err := a.win.SetIcon(icon); err != nil {
 		log.Print("no window icon: ", err)
 	}
 
@@ -106,6 +109,7 @@ func (a *app) ready() {
 	a.setUpTray()
 
 	a.bindShortcuts()
+	a.installed(a.kernelKind())
 	a.probe()
 	if item := a.subs.Running(); item != nil {
 		a.refresh(item.Name)
@@ -135,9 +139,13 @@ func (a *app) quit() {
 }
 
 func (a *app) setUpTray() {
+	icon, err := appIcon(32)
+	if err != nil {
+		log.Print("no tray icon: ", err)
+		return
+	}
 	tray, err := mygo.NewTray(mygo.TrayOptions{
-
-		Icon:    appIcon(32),
+		Icon:    icon,
 		ToolTip: "TunGo",
 	})
 	if err != nil {
@@ -154,51 +162,28 @@ func (a *app) refreshTray() {
 	if a.tray == nil {
 		return
 	}
-	nodes := make([]*mygo.MenuItem, 0, len(a.nodes))
-	for i, node := range a.nodes {
-		at := i
-		nodes = append(nodes, &mygo.MenuItem{
-			Label:   node.Name,
-			Type:    mygo.MenuItemRadio,
-			Checked: i == a.chosen,
-			Click: func(*mygo.MenuItem, *mygo.Window) {
-				a.choose(at)
-				a.sync()
-			},
+	nodes := radios(len(a.nodes), a.chosen, func(i int) string { return a.nodes[i].Name },
+		func(i int) {
+			a.choose(i)
+			a.sync()
 		})
-	}
 	if len(nodes) == 0 {
 		nodes = append(nodes, &mygo.MenuItem{Label: i18n.T("还没有节点"), Disabled: true})
 	}
-	routes := make([]*mygo.MenuItem, 0, len(a.routes.Items))
-	for _, item := range a.routes.Items {
-		name := item.Name
-		routes = append(routes, &mygo.MenuItem{
-			Label:   i18n.T(name),
-			Type:    mygo.MenuItemRadio,
-			Checked: a.routes.Current == name,
-			Click: func(*mygo.MenuItem, *mygo.Window) {
-				a.selectRouting(name)
-				a.sync()
-			},
+	routes := radios(len(a.routes.Items),
+		slices.IndexFunc(a.routes.Items, func(item core.RoutingItem) bool { return item.Name == a.routes.Current }),
+		func(i int) string { return routeLabel(a.routes.Items[i].Name) },
+		func(i int) {
+			a.selectRouting(a.routes.Items[i].Name)
+			a.sync()
 		})
-	}
-	proxies := make([]*mygo.MenuItem, 0, len(sysproxy.Modes))
-	for _, mode := range sysproxy.Modes {
-		name := string(mode)
-		proxies = append(proxies, &mygo.MenuItem{
-			Label:    proxyName(mode),
-			Type:     mygo.MenuItemRadio,
-			Checked:  a.proxy == name,
-			Disabled: false,
-			Click: func(*mygo.MenuItem, *mygo.Window) {
-				a.proxy = name
-				a.applySysProxy()
-				a.saveSettings()
-				a.sync()
-			},
+	proxies := radios(len(sysproxy.Modes),
+		slices.IndexFunc(sysproxy.Modes, func(mode sysproxy.Mode) bool { return string(mode) == a.proxy }),
+		func(i int) string { return proxyName(sysproxy.Modes[i]) },
+		func(i int) {
+			a.setProxyMode(string(sysproxy.Modes[i]))
+			a.sync()
 		})
-	}
 	a.tray.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
 		{Label: "TunGo — " + a.status(), Disabled: true},
 		{Label: i18n.T("显示窗口"), Click: func(*mygo.MenuItem, *mygo.Window) { a.show() }},
@@ -238,6 +223,22 @@ func (a *app) refreshTray() {
 		}},
 	}))
 	a.tray.SetToolTip("TunGo — " + a.status())
+}
+
+func radios(count, selected int, label func(int) string, click func(int)) []*mygo.MenuItem {
+	items := make([]*mygo.MenuItem, 0, count)
+	for i := 0; i < count; i++ {
+		at := i
+		items = append(items, &mygo.MenuItem{
+			Label:   label(at),
+			Type:    mygo.MenuItemRadio,
+			Checked: at == selected,
+			Click: func(*mygo.MenuItem, *mygo.Window) {
+				click(at)
+			},
+		})
+	}
+	return items
 }
 
 func (a *app) copyProxyCommand() {

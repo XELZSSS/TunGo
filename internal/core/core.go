@@ -1,6 +1,7 @@
 package core
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"net"
@@ -119,17 +120,17 @@ func Binary(kind Kind) (string, error) {
 }
 
 type Kernel struct {
-	kind    Kind
-	cmd     *exec.Cmd
-	socks   string
-	path    string
-	started time.Time
-	lines   *ring
-	done    chan struct{}
-	once    sync.Once
+	kind   Kind
+	cmd    *exec.Cmd
+	socks  string
+	secret string
+	path   string
+	lines  *ring
+	done   chan struct{}
+	once   sync.Once
 }
 
-func launch(kind Kind, binary string, n Node, socks string, config []byte, timeout time.Duration) (*Kernel, error) {
+func launch(kind Kind, binary string, socks string, config []byte, timeout time.Duration) (*Kernel, error) {
 	run, err := appdir.Sub("run")
 	if err != nil {
 		return nil, err
@@ -159,13 +160,12 @@ func launch(kind Kind, binary string, n Node, socks string, config []byte, timeo
 	follow(cmd)
 
 	k := &Kernel{
-		kind:    kind,
-		cmd:     cmd,
-		socks:   socks,
-		path:    path,
-		started: time.Now(),
-		lines:   lines,
-		done:    make(chan struct{}),
+		kind:  kind,
+		cmd:   cmd,
+		socks: socks,
+		path:  path,
+		lines: lines,
+		done:  make(chan struct{}),
 	}
 	go func() {
 		cmd.Wait()
@@ -251,15 +251,18 @@ func Start(kind Kind, n Node, socks string, tun bool) (*Kernel, error) {
 	var last error
 	for attempt := 0; attempt < 2; attempt++ {
 		clash := ""
+		secret := ""
 		if kind == SingBox {
 			clash = "127.0.0.1:0"
+			secret = rand.Text()
 		}
-		config, err := Config(kind, n, socks, policy, clash, tunName)
+		config, err := Config(kind, n, socks, policy, clash, secret, tunName)
 		if err != nil {
 			return nil, err
 		}
-		k, err := launch(kind, binary, n, socks, config, timeout)
+		k, err := launch(kind, binary, socks, config, timeout)
 		if err == nil {
+			k.secret = secret
 			if tunName != "" && !waitTun(k, tunName, tunReadyTimeout) {
 				k.Stop()
 				last = errors.New(i18n.T("TUN 网卡没接管"))
@@ -269,7 +272,7 @@ func Start(kind Kind, n Node, socks string, tun bool) (*Kernel, error) {
 			return k, nil
 		}
 		last = err
-		if !retryable(err, tun) {
+		if !tun || !retryable(err) {
 			break
 		}
 		if tun {
@@ -279,10 +282,7 @@ func Start(kind Kind, n Node, socks string, tun bool) (*Kernel, error) {
 	return nil, fmt.Errorf(i18n.T("%s 起不来：%w"), kind, last)
 }
 
-func retryable(err error, tun bool) bool {
-	if !tun {
-		return false
-	}
+func retryable(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "already exists") || strings.Contains(msg, "Element not found")
 }
@@ -363,3 +363,5 @@ func clashAddrIn(line string) string {
 	}
 	return strings.TrimSpace(line[i+len(marker):])
 }
+
+func BinDir() (string, error) { return binDir() }

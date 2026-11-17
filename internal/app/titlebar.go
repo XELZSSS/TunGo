@@ -15,10 +15,6 @@ const (
 func (a *app) titleBar(c *ui.Context, t *ui.Theme) {
 	ui.Row(c).Gap(gapBase).AlignItems(ui.Center).Height(titleBarHeight).PaddingX(padX).Background(t.Background).DragWindow().Children(func() {
 		ui.Text(c, "TunGo").FontSize(fontM).FontWeight(weightSemibold).TextColor(t.Text).IgnoreInput(true)
-		if node := a.titleNode(); node != "" {
-			ui.Icon(c, iconDot).Size(markSize, markSize).TextColor(a.statusColor(t)).IgnoreInput(true)
-			ui.Text(c, node).FontSize(fontS).TextColor(t.TextMuted).IgnoreInput(true)
-		}
 		ui.Box(c).Grow(1)
 		a.caption(c, t, captionMinimize)
 		a.caption(c, t, captionMaximize)

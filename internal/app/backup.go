@@ -6,9 +6,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"tungo/internal/backup"
-	"tungo/internal/core"
 	"tungo/internal/i18n"
-	"tungo/internal/sub"
 )
 
 func (a *app) backupMenu(_ *ui.Context, m *ui.Menu) {
@@ -58,41 +56,13 @@ func (a *app) reloadAll() {
 	if a.connected() {
 		a.disconnect()
 	}
-	remembered, err := loadSettings()
-	if err != nil {
+	if err := a.loadAll(); err != nil {
 		a.fail(err.Error())
 		a.logf("%s", err)
 		return
 	}
-	i18n.Set(remembered.Lang)
-	nodes, at, err := core.LoadNodes()
-	if err != nil {
-		a.fail(err.Error())
-		a.logf("%s", err)
-		return
-	}
-	routes, err := core.LoadRoutingSet()
-	if err != nil {
-		a.fail(err.Error())
-		a.logf("%s", err)
-		return
-	}
-
-	a.nodesAt = at
-	a.setNodes(nodes)
-	a.chosen = 0
-	a.subs = sub.Load()
-	a.routes = routes
-	a.skipped, a.shortcuts = remembered.Skipped, remembered.Shortcuts
-	if remembered.Kind != "" {
-		a.kind = remembered.Kind
-	}
-	if remembered.Theme != "" {
-		a.themeName = remembered.Theme
-	}
-	if remembered.Proxy != "" {
-		a.proxy = remembered.Proxy
-	}
-	a.tun = remembered.Tun
+	a.versionFor, a.version, a.latest = "", "", ""
+	a.bindShortcuts()
 	a.notice = ""
+	a.know(a.kernelKind())
 }

@@ -1,9 +1,7 @@
 package core
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -134,32 +132,14 @@ func LoadNodes() ([]Node, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-
-		return nil, path, nil
-	}
-	if err != nil {
-		return nil, path, err
-	}
 	var nodes []Node
-	if err := json.Unmarshal(data, &nodes); err != nil {
+	if err := appdir.ReadJSON("nodes.json", &nodes); err != nil {
 		return nil, path, err
 	}
 	return nodes, path, nil
 }
 
-func SaveNodes(nodes []Node) error {
-	path, err := nodesPath()
-	if err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(nodes, "", "  ")
-	if err != nil {
-		return err
-	}
-	return appdir.WriteFile(path, data, 0o600)
-}
+func SaveNodes(nodes []Node) error { return appdir.WriteJSON("nodes.json", nodes) }
 
 func nodesPath() (string, error) {
 	d, err := appdir.Dir()
@@ -167,13 +147,6 @@ func nodesPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(d, "nodes.json"), nil
-}
-
-func (n Node) Where() string {
-	if n.Direct() {
-		return "direct"
-	}
-	return n.Server
 }
 
 func (n Node) Summary() string {

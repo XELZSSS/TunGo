@@ -104,21 +104,21 @@ func (a *app) realPing(i int) {
 	if i < 0 || i >= len(a.nodes) || a.nodes[i].Direct() {
 		return
 	}
-	node := a.resolved(a.nodes[i])
+	node := a.nodes[i]
 	a.logf(i18n.T("真连接延迟：%s"), node.Name)
 	go func() {
-		ms, _, err := a.measure(node, false)
+		ms, _, err := a.measure(a.resolved(node), false)
 		a.update(func() {
-			if i >= len(a.ms) {
+			at := a.indexOfNode(node)
+			if at < 0 {
 				return
 			}
-			a.rev++
 			if err != nil {
-				a.ms[i] = -1
+				a.ms[at] = -1
 				a.logf(i18n.T("%s：%s"), node.Name, err)
 				return
 			}
-			a.ms[i] = ms
+			a.ms[at] = ms
 			a.logf(i18n.T("%s：%d ms"), node.Name, ms)
 		})
 	}()
@@ -128,22 +128,22 @@ func (a *app) speedTest(i int) {
 	if i < 0 || i >= len(a.nodes) || a.nodes[i].Direct() {
 		return
 	}
-	node := a.resolved(a.nodes[i])
+	node := a.nodes[i]
 	a.logf(i18n.T("测速：%s"), node.Name)
 	go func() {
-		ms, mb, err := a.measure(node, true)
+		ms, mb, err := a.measure(a.resolved(node), true)
 		a.update(func() {
-			if i >= len(a.ms) {
+			at := a.indexOfNode(node)
+			if at < 0 {
 				return
 			}
-			a.rev++
 			if err != nil {
-				a.speed[i] = 0
+				a.speed[at] = 0
 				a.logf(i18n.T("%s：%s"), node.Name, err)
 				return
 			}
-			a.ms[i] = ms
-			a.speed[i] = mb
+			a.ms[at] = ms
+			a.speed[at] = mb
 			a.logf(i18n.T("%s：%d ms，%.1f MB/s"), node.Name, ms, mb)
 		})
 	}()

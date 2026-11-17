@@ -7,7 +7,6 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"tungo/internal/i18n"
-	"tungo/internal/sysproxy"
 )
 
 const (
@@ -31,9 +30,15 @@ func (a *app) shortcutForm(c *ui.Context) {
 		ui.Column(c).Gap(gapLoose).Width(520).Children(func() {
 			heading(c, i18n.T("全局热键"))
 			muted(c, t, i18n.T("写一个组合键，如 CommandOrControl+Alt+T；留空表示不绑定。它由系统截获，别的窗口有焦点时也生效。"))
-			for _, action := range []string{shortcutShow, shortcutConn, shortcutProxy} {
-				name := action
-				ui.TextInput(c, a.shortcutField(name)).Label(i18n.T(shortcutNames[name])).Placeholder("CommandOrControl+Alt+T").Grow(1)
+			for _, one := range []struct {
+				action string
+				key    *string
+			}{
+				{shortcutShow, &a.shortcutShowKey},
+				{shortcutConn, &a.shortcutConnKey},
+				{shortcutProxy, &a.shortcutProxyKey},
+			} {
+				ui.TextInput(c, one.key).Label(i18n.T(shortcutNames[one.action])).Placeholder("CommandOrControl+Alt+T").Grow(1)
 			}
 			ui.Row(c).Gap(gapBase).Justify(ui.End).Children(func() {
 				if ui.Button(c, i18n.T("取消")).Clicked() {
@@ -46,16 +51,6 @@ func (a *app) shortcutForm(c *ui.Context) {
 			})
 		})
 	})
-}
-
-func (a *app) shortcutField(action string) *string {
-	switch action {
-	case shortcutShow:
-		return &a.shortcutShowKey
-	case shortcutConn:
-		return &a.shortcutConnKey
-	}
-	return &a.shortcutProxyKey
 }
 
 func (a *app) openShortcuts() {
@@ -117,13 +112,7 @@ func (a *app) shortcut(action string) {
 			}
 			a.refreshTray()
 		case shortcutProxy:
-			if a.proxy == string(sysproxy.ModeSet) {
-				a.proxy = string(sysproxy.ModeClear)
-			} else {
-				a.proxy = string(sysproxy.ModeSet)
-			}
-			a.applySysProxy()
-			a.saveSettings()
+			a.toggleProxy()
 		}
 	})
 }

@@ -63,7 +63,11 @@ func linkURI(n core.Node) (string, error) {
 	if n.Host != "" {
 		q.Set("host", n.Host)
 	}
-	q.Set("security", securityOf(n))
+	sec := core.SecurityOf(n)
+	if sec == "" {
+		sec = "none"
+	}
+	q.Set("security", sec)
 	if n.ServerName != "" {
 		q.Set("sni", n.ServerName)
 	}
@@ -91,16 +95,6 @@ func linkURI(n core.Node) (string, error) {
 	u.RawQuery = q.Encode()
 	u.Fragment = n.Name
 	return u.String(), nil
-}
-
-func securityOf(n core.Node) string {
-	if n.TLS != "" {
-		return n.TLS
-	}
-	if n.Protocol == "trojan" {
-		return "tls"
-	}
-	return "none"
 }
 
 func shadowsocksURI(n core.Node) (string, error) {

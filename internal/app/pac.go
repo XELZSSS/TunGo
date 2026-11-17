@@ -1,14 +1,13 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 
 	"tungo/internal/i18n"
 )
-
-const pacPort = "10811"
 
 const pacScript = `function FindProxyForURL(url, host) {
   if (isPlainHostName(host) ||
@@ -29,12 +28,17 @@ func (a *app) startPac() (string, error) {
 		w.Header().Set("Content-Type", "application/x-ns-proxy-autoconfig")
 		fmt.Fprintf(w, pacScript, a.localAddr())
 	})
-	listener, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", pacPort))
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return "", fmt.Errorf("%s: %w", i18n.T("PAC 端口起不来"), err)
 	}
-	a.pac = &http.Server{Handler: handler}
-	go a.pac.Serve(listener)
+	server := &http.Server{Handler: handler}
+	a.pac = server
+	go func() {
+		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			a.update(func() { a.logf("PAC: %s", err) })
+		}
+	}()
 	return "http://" + listener.Addr().String() + "/pac", nil
 }
 

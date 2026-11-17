@@ -41,18 +41,8 @@ func EnsureRuleSet(entry string, kind Kind) error {
 	}
 	base := filepath.Join(dir, k+"-"+tag)
 	if ruleSetPath(k+"-"+tag+".srs") == "" {
-		urls := reachable(rulesetURL + k + "/" + k + "-" + tag + ".srs")
-		if len(urls) == 0 {
-			return fmt.Errorf(i18n.T("%s：下载地址都连不上，可在 %s 里换成你能用的镜像"), entry, mirrorsFile())
-		}
-		var last error
-		for _, url := range urls {
-			if last = fetchRuleSet(url, base+".srs"); last == nil {
-				break
-			}
-		}
-		if last != nil {
-			return fmt.Errorf("%s: %w", entry, last)
+		if err := fetchRuleSet(rulesetURL+k+"/"+k+"-"+tag+".srs", base+".srs"); err != nil {
+			return fmt.Errorf("%s: %w", entry, err)
 		}
 	}
 	if kind != Xray {

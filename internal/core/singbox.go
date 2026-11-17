@@ -99,7 +99,7 @@ func singBoxOutbound(n Node) (map[string]any, error) {
 			out["congestion_control"] = n.Congestion
 		}
 	}
-	if securityOf(n) != "" && carriesTLS(n.Protocol) {
+	if SecurityOf(n) != "" && carriesTLS(n.Protocol) {
 		out["tls"] = singBoxTLS(n)
 	}
 	if carriesTransport(n.Protocol) && n.Network != "" && n.Network != "tcp" {
@@ -122,13 +122,13 @@ func singBoxTLS(n Node) map[string]any {
 		tls["ech"] = singBoxECH(n.ECH)
 	}
 	fingerprint := n.Fingerprint
-	if securityOf(n) == "reality" && fingerprint == "" {
+	if SecurityOf(n) == "reality" && fingerprint == "" {
 		fingerprint = "chrome"
 	}
 	if fingerprint != "" {
 		tls["utls"] = map[string]any{"enabled": true, "fingerprint": fingerprint}
 	}
-	if securityOf(n) == "reality" {
+	if SecurityOf(n) == "reality" {
 		tls["reality"] = map[string]any{
 			"enabled":    true,
 			"public_key": n.PublicKey,
@@ -155,7 +155,7 @@ func singBoxTransport(n Node) map[string]any {
 	case "grpc":
 		return map[string]any{"type": "grpc", "service_name": n.Path}
 	case "http":
-		return map[string]any{"type": "http", "host": hosts(n), "path": wsPath(n)}
+		return map[string]any{"type": "http", "host": []string{hostName(n)}, "path": wsPath(n)}
 	case "httpupgrade":
 		upgrade := map[string]any{"type": "httpupgrade", "path": wsPath(n)}
 		if n.Host != "" {
@@ -271,14 +271,6 @@ func singBoxRoute(routing Routing) (map[string]any, error) {
 			base["protocol"] = rule.Protocol
 		}
 
-		emit := func(key string, value any) {
-			one := map[string]any{}
-			for k, v := range base {
-				one[k] = v
-			}
-			one[key] = value
-			rules = append(rules, one)
-		}
 		var entries, ruleSets, ips []string
 		private := false
 		for _, entry := range rule.Domain {
@@ -328,7 +320,7 @@ func singBoxRoute(routing Routing) (map[string]any, error) {
 			{"ip_is_private", true, private},
 		} {
 			if one.on {
-				emit(one.key, one.value)
+				addRule(&rules, base, one.key, one.value)
 			}
 		}
 

@@ -122,8 +122,15 @@ func (a *app) commitGroup() {
 		a.groupNote = i18n.T("策略组要有名称，还要至少一个节点")
 		return
 	}
+	at := a.indexOfNode(a.groupWas)
+	for i, node := range a.nodes {
+		if i != at && node.Name == name {
+			a.groupNote = i18n.T("已有同名节点")
+			return
+		}
+	}
 	group := core.Node{Name: name, Role: core.GroupRole, Children: children, Strategy: strategyOf(a.groupStrategy)}
-	if at := a.indexOfNode(a.groupWas); at >= 0 {
+	if at >= 0 {
 		group.Sub = a.nodes[at].Sub
 		a.nodes[at] = group
 	} else {

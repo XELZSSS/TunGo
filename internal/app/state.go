@@ -28,10 +28,7 @@ type lists struct {
 	panePct  float32
 	tab      int
 	group    string
-	groups   []string
-	groupsAt groupsKey
 	shown    []int
-	rowsAt   rowsKey
 	row      int
 	rowAt    int
 }
@@ -41,10 +38,8 @@ type servers struct {
 	nodesAt string
 	chosen  int
 	kind    string
-	port    string
 	ms      []int
 	speed   []float64
-	rev     int
 }
 
 type feedback struct {
@@ -62,21 +57,18 @@ type subscriptions struct {
 	subBusy        bool
 	subDraft       sub.Item
 	subAt          int
-	subFormAt      string
 	editingSub     bool
 	editingSubItem bool
 	subInterval    string
 }
 
 type kernels struct {
-	installing string
 	installAt  string
 	version    string
 	versionFor core.Kind
 	latest     string
 	skipped    map[string]string
 	checking   bool
-	have       map[core.Kind]bool
 	updating   bool
 }
 
@@ -103,6 +95,8 @@ type forms struct {
 	groupStrategy string
 	groupPick     map[string]bool
 	groupNote     string
+	editingPort   bool
+	portText      string
 }
 
 type routing struct {
@@ -132,14 +126,18 @@ type routing struct {
 }
 
 type link struct {
-	local   *proxy.Server
-	kernel  *core.Kernel
-	stop    chan struct{}
-	drain   chan struct{}
-	pac     *http.Server
-	proxy   string
-	tun     bool
-	applied bool
-	up      int64
-	down    int64
+	local    *proxy.Server
+	kernel   *core.Kernel
+	stop     chan struct{}
+	drain    chan struct{}
+	pac      *http.Server
+	proxy    string
+	proxyOn  string
+	tun      bool
+	applied  string
+	port     int
+	upRaw    int64
+	downRaw  int64
+	upBase   int64
+	downBase int64
 }

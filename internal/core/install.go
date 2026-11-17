@@ -11,20 +11,23 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
-	"tungo/internal/appdir"
 	"tungo/internal/i18n"
+)
+
+const (
+	githubURL = "https://github.com/"
+	githubAPI = "https://api.github.com/repos/"
 )
 
 type release struct {
@@ -37,63 +40,30 @@ var releases = map[Kind]release{
 	Xray:    {repo: "XTLS/Xray-core", tag: "v26.10.31"},
 }
 
-var mirrors = []string{
-	"https://ghfast.top/",
-	"https://ghproxy.cn/",
-	"https://gh-proxy.com/",
-	"",
-}
-
-var apiMirrors = []string{
-	"https://gh-proxy.com/",
-	"",
-}
-
-func Ensure(kind Kind, progress func(part, whole int64)) (string, error) {
-	if binary, err := Binary(kind); err == nil {
-		return binary, nil
-	}
-	tag, err := Latest(kind)
-	if err != nil {
-
-		return Install(kind, "", progress)
-	}
-	return Install(kind, tag, progress)
-}
-
 func Latest(kind Kind) (string, error) {
-	url := "https://api.github.com/repos/" + releases[kind].repo + "/releases/latest"
-	var last error
-	for _, mirror := range apiMirrors {
-		tag, err := tagOf(mirror + url)
-		if err == nil {
-			return tag, nil
-		}
-		last = err
+	url := githubURL + releases[kind].repo + "/releases/latest"
+	client := &http.Client{
+		Timeout:   15 * time.Second,
+		Transport: transport(),
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
 	}
-	return "", last
-}
-
-func tagOf(url string) (string, error) {
-	client := &http.Client{Timeout: 15 * time.Second, Transport: transport()}
-	resp, err := client.Get(url)
+	req, err := http.NewRequest(http.MethodHead, url, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "TunGo")
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("%s：%s", url, resp.Status)
-	}
-	var release struct {
-		Tag string `json:"tag_name"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return "", err
-	}
-	if release.Tag == "" {
+	parts := strings.Split(resp.Header.Get("Location"), "/tag/")
+	if len(parts) < 2 || parts[1] == "" {
 		return "", fmt.Errorf(i18n.T("%s：没有版本号"), url)
 	}
-	return release.Tag, nil
+	return parts[1], nil
 }
 
 func Version(kind Kind) string {
@@ -121,29 +91,11 @@ func versionOf(kind Kind, binary string) ([]byte, error) {
 func numbers(text string) string {
 	for _, field := range strings.Fields(text) {
 		field = strings.Trim(field, "v()[],")
-		if isVersion(field) {
+		if len(fields(field)) >= 2 {
 			return field
 		}
 	}
 	return ""
-}
-
-func isVersion(text string) bool {
-	parts := strings.Split(text, ".")
-	if len(parts) < 2 {
-		return false
-	}
-	for _, part := range parts {
-		if part == "" {
-			return false
-		}
-		for _, digit := range part {
-			if digit < '0' || digit > '9' {
-				return false
-			}
-		}
-	}
-	return true
 }
 
 func Newer(tag, version string) bool {
@@ -180,15 +132,21 @@ func fields(version string) []int {
 }
 
 func Install(kind Kind, tag string, progress func(part, whole int64)) (string, error) {
-	rel := releases[kind]
 	if tag == "" {
-		tag = rel.tag
+		var err error
+		if tag, err = Latest(kind); err != nil {
+			return "", err
+		}
 	}
 	archive, err := file(kind, tag)
 	if err != nil {
 		return "", err
 	}
-	github := "https://github.com/" + rel.repo + "/releases/download/" + tag + "/" + archive
+	url := githubURL + releases[kind].repo + "/releases/download/" + tag + "/" + archive
+	want := assetDigest(kind, tag, archive)
+	if want == "" {
+		log.Print("no digest for ", archive)
+	}
 
 	temp, err := os.CreateTemp("", "tungo-"+string(kind)+"-*")
 	if err != nil {
@@ -197,7 +155,15 @@ func Install(kind Kind, tag string, progress func(part, whole int64)) (string, e
 	defer os.Remove(temp.Name())
 	defer temp.Close()
 
-	if err := download(kind, github, temp, progress); err != nil {
+	if err := fetch(url, temp, progress); err != nil {
+		return "", err
+	}
+	if ok, err := looks(archive, temp); err != nil {
+		return "", err
+	} else if !ok {
+		return "", fmt.Errorf(i18n.T("%s：返回的不是安装包"), url)
+	}
+	if err := verify(want, url, temp); err != nil {
 		return "", err
 	}
 
@@ -268,45 +234,32 @@ func platform(kind Kind) (string, error) {
 	return name, nil
 }
 
-func download(kind Kind, github string, to *os.File, progress func(part, whole int64)) error {
-	urls := reachable(github)
-	if len(urls) == 0 {
-		return fmt.Errorf(i18n.T("下载地址都连不上，可在 %s 里换成你能用的镜像"), mirrorsFile())
+func assetDigest(kind Kind, tag, name string) string {
+	url := githubAPI + releases[kind].repo + "/releases/tags/" + tag
+	var body bytes.Buffer
+	if err := fetch(url, &body, nil); err != nil {
+		return ""
 	}
-	var last error
-	for _, url := range urls {
-		if err := to.Truncate(0); err != nil {
-			return err
-		}
-		if _, err := to.Seek(0, io.SeekStart); err != nil {
-			return err
-		}
-		err := fetch(url, to, progress)
-		if err == nil {
-			ok, checkErr := looks(github, to)
-			if checkErr != nil {
-				return checkErr
-			}
-			if ok {
-				if err = verify(kind, github, to); err == nil {
-					return nil
-				}
-			} else {
-				err = fmt.Errorf(i18n.T("%s：返回的不是安装包"), url)
-			}
-		}
-		last = err
+	var got struct {
+		Assets []struct {
+			Name   string `json:"name"`
+			Digest string `json:"digest"`
+		} `json:"assets"`
 	}
-	return last
+	if err := json.Unmarshal(body.Bytes(), &got); err != nil {
+		return ""
+	}
+	for _, asset := range got.Assets {
+		if asset.Name == name {
+			return strings.TrimPrefix(asset.Digest, "sha256:")
+		}
+	}
+	return ""
 }
 
-func verify(kind Kind, github string, from *os.File) error {
-	if kind != Xray {
+func verify(want, url string, from *os.File) error {
+	if want == "" {
 		return nil
-	}
-	want, err := digest(github + ".dgst")
-	if err != nil {
-		return err
 	}
 	if _, err := from.Seek(0, io.SeekStart); err != nil {
 		return err
@@ -316,99 +269,9 @@ func verify(kind Kind, github string, from *os.File) error {
 		return err
 	}
 	if got := hex.EncodeToString(sum.Sum(nil)); got != want {
-		return fmt.Errorf(i18n.T("%s：SHA256 对不上（%s）"), github, got)
+		return fmt.Errorf(i18n.T("%s：SHA256 对不上（%s）"), url, got)
 	}
 	return nil
-}
-
-func digest(url string) (string, error) {
-	urls := reachable(url)
-	if len(urls) == 0 {
-		return "", fmt.Errorf(i18n.T("%s 连不上"), url)
-	}
-	var last error
-	for _, one := range urls {
-		var body bytes.Buffer
-		if err := fetch(one, &body, nil); err != nil {
-			last = err
-			continue
-		}
-		for _, line := range strings.Split(body.String(), "\n") {
-			if value, ok := strings.CutPrefix(strings.TrimSpace(line), "SHA256="); ok {
-				return strings.ToLower(strings.TrimSpace(value)), nil
-			}
-		}
-		last = fmt.Errorf(i18n.T("%s：没有 SHA256"), one)
-	}
-	return "", last
-}
-
-type answer struct {
-	url string
-	at  time.Duration
-}
-
-func reachable(github string) []string {
-	answers := make(chan answer, len(mirrorList()))
-	var wg sync.WaitGroup
-	for _, mirror := range mirrorList() {
-		wg.Add(1)
-		go func(url string) {
-			defer wg.Done()
-			start := time.Now()
-			if has(url) {
-				answers <- answer{url, time.Since(start)}
-			}
-		}(mirror + github)
-	}
-	go func() {
-		wg.Wait()
-		close(answers)
-	}()
-
-	var found []answer
-	wait := time.NewTimer(10 * time.Second)
-	defer wait.Stop()
-	settling := false
-	for {
-		select {
-		case a, ok := <-answers:
-			if !ok {
-				return order(found)
-			}
-			found = append(found, a)
-			if !settling {
-				settling = true
-				wait.Reset(800 * time.Millisecond)
-			}
-		case <-wait.C:
-			return order(found)
-		}
-	}
-}
-
-func order(found []answer) []string {
-	sort.Slice(found, func(i, j int) bool { return found[i].at < found[j].at })
-	urls := make([]string, len(found))
-	for i, a := range found {
-		urls[i] = a.url
-	}
-	return urls
-}
-
-func has(url string) bool {
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return false
-	}
-	req.Header.Set("Range", "bytes=0-0")
-	client := &http.Client{Timeout: 8 * time.Second, Transport: transport()}
-	resp, err := client.Do(req)
-	if err != nil {
-		return false
-	}
-	defer resp.Body.Close()
-	return resp.StatusCode == http.StatusPartialContent || resp.StatusCode == http.StatusOK
 }
 
 func looks(archive string, from *os.File) (bool, error) {
@@ -428,7 +291,12 @@ func looks(archive string, from *os.File) (bool, error) {
 
 func fetch(url string, to io.Writer, progress func(part, whole int64)) error {
 	client := &http.Client{Timeout: 10 * time.Minute, Transport: transport()}
-	resp, err := client.Get(url)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", "TunGo")
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -453,58 +321,6 @@ func transport() *http.Transport {
 		TLSHandshakeTimeout:   8 * time.Second,
 		ResponseHeaderTimeout: 15 * time.Second,
 	}
-}
-
-func WriteMirrors() error {
-	path := mirrorsFile()
-	if _, err := os.Stat(path); err == nil {
-		return nil
-	}
-	return os.WriteFile(path, []byte(defaultMirrors()), 0o600)
-}
-
-func mirrorList() []string {
-	data, err := os.ReadFile(mirrorsFile())
-	if err != nil {
-		return mirrors
-	}
-	var out []string
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		if line == "github" {
-			line = ""
-		}
-		out = append(out, line)
-	}
-	if len(out) == 0 {
-		return mirrors
-	}
-	return out
-}
-
-func defaultMirrors() string {
-	lines := make([]string, 0, len(mirrors))
-	for _, mirror := range mirrors {
-		if mirror == "" {
-			mirror = "github"
-		}
-		lines = append(lines, mirror)
-	}
-	return i18n.T("# 内核下载走哪些地址，一行一个，按顺序试。") + "\n" +
-		i18n.T("# github 表示直连 GitHub（放在最后，前面都不行时才用它）。") + "\n" +
-		i18n.T("# 换成你能用的镜像即可，例如公司内网的文件代理。") + "\n" +
-		strings.Join(lines, "\n") + "\n"
-}
-
-func mirrorsFile() string {
-	d, err := appdir.Dir()
-	if err != nil {
-		return "mirrors.txt"
-	}
-	return filepath.Join(d, "mirrors.txt")
 }
 
 type progressReader struct {

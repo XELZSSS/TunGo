@@ -110,7 +110,7 @@ func xrayOutbound(n Node) (map[string]any, error) {
 
 func xrayStream(n Node) map[string]any {
 	stream := map[string]any{}
-	switch securityOf(n) {
+	switch SecurityOf(n) {
 	case "tls":
 		tls := map[string]any{"serverName": serverName(n)}
 		if alpn := alpnOf(n); len(alpn) > 0 {
@@ -181,13 +181,13 @@ func xrayDNS(dns DNS, routing Routing) map[string]any {
 		})
 	}
 	servers = append(servers, map[string]any{"address": dns.Remote})
-	out := map[string]any{
-
-		"servers":       servers,
-		"queryStrategy": xrayStrategy(dns.Strategy),
+	strategy := xrayStrategy(dns.Strategy)
+	if dns.BlockAAAA && strategy != "UseIPv6" {
+		strategy = "UseIPv4"
 	}
-	if dns.BlockAAAA && out["queryStrategy"] != "UseIPv6" {
-		out["queryStrategy"] = "UseIPv4"
+	out := map[string]any{
+		"servers":       servers,
+		"queryStrategy": strategy,
 	}
 	if len(dns.Hosts) > 0 {
 		hosts := map[string]any{}
@@ -243,14 +243,6 @@ func xrayRouting(routing Routing, n Node) (map[string]any, error) {
 		if len(rule.Protocol) > 0 {
 			base["protocol"] = rule.Protocol
 		}
-		emit := func(key string, value any) {
-			one := map[string]any{}
-			for k, v := range base {
-				one[k] = v
-			}
-			one[key] = value
-			rules = append(rules, one)
-		}
 		var domains, ips []string
 		for _, entry := range rule.Domain {
 			switch {
@@ -277,10 +269,10 @@ func xrayRouting(routing Routing, n Node) (map[string]any, error) {
 			return nil, fmt.Errorf(i18n.T("xray 的 IP 规则展开后为空：%s 缺少对应的 geoip 列表"), strings.Join(rule.IP, ", "))
 		}
 		if len(domains) > 0 {
-			emit("domain", domains)
+			addRule(&rules, base, "domain", domains)
 		}
 		if len(ips) > 0 {
-			emit("ip", ips)
+			addRule(&rules, base, "ip", ips)
 		}
 		if len(rule.Domain) == 0 && len(rule.IP) == 0 {
 			rules = append(rules, base)
