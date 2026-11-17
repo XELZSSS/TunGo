@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"tungo/internal/appdir"
+	"tungo/internal/i18n"
 )
 
 type Rule struct {
@@ -226,7 +227,7 @@ func read(name string, v any) error {
 		return err
 	}
 	if err := json.Unmarshal(data, v); err != nil {
-		return fmt.Errorf("%s 解析失败：%w", name, err)
+		return fmt.Errorf(i18n.T("%s 解析失败：%w"), name, err)
 	}
 	return nil
 }

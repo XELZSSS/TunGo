@@ -2,9 +2,13 @@
 
 package sysproxy
 
-import "errors"
+import (
+	"errors"
 
-var errUnsupported = errors.New("sysproxy: 32 位 Windows 不写系统代理")
+	"tungo/internal/i18n"
+)
+
+var errUnsupported = errors.New(i18n.T("sysproxy: 32 位 Windows 不写系统代理"))
 
 func Enable(string) error    { return errUnsupported }
 func EnablePac(string) error { return errUnsupported }

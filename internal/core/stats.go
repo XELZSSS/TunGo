@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"tungo/internal/i18n"
 )
 
 type Conn struct {
@@ -23,7 +25,7 @@ type Conn struct {
 func (k *Kernel) CloseConnections() error {
 	addr := k.clashAddr()
 	if addr == "" {
-		return fmt.Errorf("%s 不提供会话列表", k.kind)
+		return fmt.Errorf(i18n.T("%s 不提供会话列表"), k.kind)
 	}
 	req, err := http.NewRequest(http.MethodDelete, "http://"+addr+"/connections", nil)
 	if err != nil {
@@ -44,7 +46,7 @@ func (k *Kernel) CloseConnections() error {
 func (k *Kernel) Sessions() (up, down int64, list []Conn, err error) {
 	addr := k.clashAddr()
 	if addr == "" {
-		return 0, 0, nil, fmt.Errorf("%s 不提供会话列表", k.kind)
+		return 0, 0, nil, fmt.Errorf(i18n.T("%s 不提供会话列表"), k.kind)
 	}
 	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get("http://" + addr + "/connections")

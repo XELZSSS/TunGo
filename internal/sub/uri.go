@@ -3,6 +3,7 @@ package sub
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	"tungo/internal/core"
+	"tungo/internal/i18n"
 )
 
 func URI(n core.Node) (string, error) {
@@ -25,7 +27,7 @@ func URI(n core.Node) (string, error) {
 	case "vless", "trojan", "socks", "http":
 		return linkURI(n)
 	}
-	return "", fmt.Errorf("不认识的协议 %s", n.Protocol)
+	return "", fmt.Errorf(i18n.T("不认识的协议 %s"), n.Protocol)
 }
 
 func linkURI(n core.Node) (string, error) {
@@ -103,7 +105,7 @@ func securityOf(n core.Node) string {
 
 func shadowsocksURI(n core.Node) (string, error) {
 	if n.Method == "" || n.Password == "" {
-		return "", fmt.Errorf("ss：缺少加密方式或密码")
+		return "", errors.New(i18n.T("ss：缺少加密方式或密码"))
 	}
 	credentials := base64.RawURLEncoding.EncodeToString([]byte(n.Method + ":" + n.Password))
 	address := net.JoinHostPort(n.Server, strconv.Itoa(n.Port))

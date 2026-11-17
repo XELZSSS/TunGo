@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"tungo/internal/appdir"
+	"tungo/internal/i18n"
 )
 
 type release struct {
@@ -90,7 +91,7 @@ func tagOf(url string) (string, error) {
 		return "", err
 	}
 	if release.Tag == "" {
-		return "", fmt.Errorf("%s：没有版本号", url)
+		return "", fmt.Errorf(i18n.T("%s：没有版本号"), url)
 	}
 	return release.Tag, nil
 }
@@ -262,7 +263,7 @@ func platform(kind Kind) (string, error) {
 	}
 	name, ok := names[system]
 	if !ok {
-		return "", fmt.Errorf("%s 没有为 %s 发布的包", kind, system)
+		return "", fmt.Errorf(i18n.T("%s 没有为 %s 发布的包"), kind, system)
 	}
 	return name, nil
 }
@@ -270,7 +271,7 @@ func platform(kind Kind) (string, error) {
 func download(kind Kind, github string, to *os.File, progress func(part, whole int64)) error {
 	urls := reachable(github)
 	if len(urls) == 0 {
-		return fmt.Errorf("下载地址都连不上，可在 %s 里换成你能用的镜像", mirrorsFile())
+		return fmt.Errorf(i18n.T("下载地址都连不上，可在 %s 里换成你能用的镜像"), mirrorsFile())
 	}
 	var last error
 	for _, url := range urls {
@@ -291,7 +292,7 @@ func download(kind Kind, github string, to *os.File, progress func(part, whole i
 					return nil
 				}
 			} else {
-				err = fmt.Errorf("%s：返回的不是安装包", url)
+				err = fmt.Errorf(i18n.T("%s：返回的不是安装包"), url)
 			}
 		}
 		last = err
@@ -315,7 +316,7 @@ func verify(kind Kind, github string, from *os.File) error {
 		return err
 	}
 	if got := hex.EncodeToString(sum.Sum(nil)); got != want {
-		return fmt.Errorf("%s：SHA256 对不上（%s）", github, got)
+		return fmt.Errorf(i18n.T("%s：SHA256 对不上（%s）"), github, got)
 	}
 	return nil
 }
@@ -323,7 +324,7 @@ func verify(kind Kind, github string, from *os.File) error {
 func digest(url string) (string, error) {
 	urls := reachable(url)
 	if len(urls) == 0 {
-		return "", fmt.Errorf("%s 连不上", url)
+		return "", fmt.Errorf(i18n.T("%s 连不上"), url)
 	}
 	var last error
 	for _, one := range urls {
@@ -337,7 +338,7 @@ func digest(url string) (string, error) {
 				return strings.ToLower(strings.TrimSpace(value)), nil
 			}
 		}
-		last = fmt.Errorf("%s：没有 SHA256", one)
+		last = fmt.Errorf(i18n.T("%s：没有 SHA256"), one)
 	}
 	return "", last
 }
@@ -492,10 +493,10 @@ func defaultMirrors() string {
 		}
 		lines = append(lines, mirror)
 	}
-	return `# 内核下载走哪些地址，一行一个，按顺序试。
-# github 表示直连 GitHub（放在最后，前面都不行时才用它）。
-# 换成你能用的镜像即可，例如公司内网的文件代理。
-` + strings.Join(lines, "\n") + "\n"
+	return i18n.T("# 内核下载走哪些地址，一行一个，按顺序试。") + "\n" +
+		i18n.T("# github 表示直连 GitHub（放在最后，前面都不行时才用它）。") + "\n" +
+		i18n.T("# 换成你能用的镜像即可，例如公司内网的文件代理。") + "\n" +
+		strings.Join(lines, "\n") + "\n"
 }
 
 func mirrorsFile() string {
@@ -548,7 +549,7 @@ func unzip(path, kind, target string) error {
 		defer in.Close()
 		return write(in, target)
 	}
-	return fmt.Errorf("发布包里没有 %s", kind)
+	return fmt.Errorf(i18n.T("发布包里没有 %s"), kind)
 }
 
 func untar(path, kind, target string) error {
@@ -576,7 +577,7 @@ func untar(path, kind, target string) error {
 		}
 		return write(reader, target)
 	}
-	return fmt.Errorf("发布包里没有 %s", kind)
+	return fmt.Errorf(i18n.T("发布包里没有 %s"), kind)
 }
 
 func base(name string) string {
@@ -599,7 +600,7 @@ func write(r io.Reader, target string) error {
 
 func runs(kind Kind, binary string) error {
 	if _, err := versionOf(kind, binary); err != nil {
-		return fmt.Errorf("%s 装好后跑不起来：%w", kind, err)
+		return fmt.Errorf(i18n.T("%s 装好后跑不起来：%w"), kind, err)
 	}
 	return nil
 }

@@ -82,7 +82,7 @@ func (a *app) table(c *ui.Context, t *ui.Theme) {
 					case 0:
 						a.remark(c, t, node.Name, at)
 					case 1:
-						code(c, t, strings.Join(node.Children, "、"))
+						code(c, t, strings.Join(node.Children, ", "))
 					case 2:
 						muted(c, t, i18n.T("策略组"))
 					case 4:

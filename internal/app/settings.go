@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"tungo/internal/appdir"
+	"tungo/internal/i18n"
 )
 
 type settings struct {
@@ -35,7 +36,7 @@ func loadSettings() (settings, error) {
 		return out, err
 	}
 	if err := json.Unmarshal(data, &out); err != nil {
-		return out, fmt.Errorf("settings.json 解析失败：%w", err)
+		return out, fmt.Errorf(i18n.T("settings.json 解析失败：%w"), err)
 	}
 	if out.Skipped == nil {
 		out.Skipped = map[string]string{}

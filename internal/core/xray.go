@@ -6,6 +6,8 @@ import (
 	"net"
 	"strconv"
 	"strings"
+
+	"tungo/internal/i18n"
 )
 
 func xrayInbound(inbound string) (map[string]any, error) {
@@ -48,13 +50,13 @@ func xrayOutbound(n Node) (map[string]any, error) {
 	if n.Raw != "" {
 		var raw map[string]any
 		if err := json.Unmarshal([]byte(n.Raw), &raw); err != nil {
-			return nil, fmt.Errorf("自定义出站不是 JSON：%w", err)
+			return nil, fmt.Errorf(i18n.T("自定义出站不是 JSON：%w"), err)
 		}
 		raw["tag"] = "proxy"
 		return raw, nil
 	}
 	if !Xray.Supports(n.Protocol) || n.Direct() {
-		return nil, fmt.Errorf("xray 不支持 %q", n.Protocol)
+		return nil, fmt.Errorf(i18n.T("xray 不支持 %q"), n.Protocol)
 	}
 	out := map[string]any{"tag": "proxy", "protocol": n.Protocol}
 	switch n.Protocol {
@@ -269,10 +271,10 @@ func xrayRouting(routing Routing, n Node) (map[string]any, error) {
 			ips = append(ips, xrayGeoIPs([]string{entry})...)
 		}
 		if len(rule.Domain) > 0 && len(domains) == 0 {
-			return nil, fmt.Errorf("xray 的域名规则展开后为空：%s 缺少对应的 geosite 列表", strings.Join(rule.Domain, "、"))
+			return nil, fmt.Errorf(i18n.T("xray 的域名规则展开后为空：%s 缺少对应的 geosite 列表"), strings.Join(rule.Domain, ", "))
 		}
 		if len(rule.IP) > 0 && len(ips) == 0 {
-			return nil, fmt.Errorf("xray 的 IP 规则展开后为空：%s 缺少对应的 geoip 列表", strings.Join(rule.IP, "、"))
+			return nil, fmt.Errorf(i18n.T("xray 的 IP 规则展开后为空：%s 缺少对应的 geoip 列表"), strings.Join(rule.IP, ", "))
 		}
 		if len(domains) > 0 {
 			emit("domain", domains)

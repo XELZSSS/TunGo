@@ -2,6 +2,7 @@ package backup
 
 import (
 	"archive/zip"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"tungo/internal/appdir"
+	"tungo/internal/i18n"
 )
 
 const maxEntry = 8 << 20
@@ -146,7 +148,7 @@ func Restore(path string) ([]string, error) {
 		if written > maxEntry {
 			out.Close()
 			os.Remove(fresh)
-			return restored, fmt.Errorf("%s 太大，不是备份里的文件", name)
+			return restored, fmt.Errorf(i18n.T("%s 太大，不是备份里的文件"), name)
 		}
 		if err := out.Close(); err != nil {
 			os.Remove(fresh)
@@ -163,7 +165,7 @@ func Restore(path string) ([]string, error) {
 		restored = append(restored, name)
 	}
 	if len(restored) == 0 {
-		return nil, fmt.Errorf("备份里没有认得的东西")
+		return nil, errors.New(i18n.T("备份里没有认得的东西"))
 	}
 	return restored, nil
 }

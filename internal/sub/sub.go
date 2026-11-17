@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"tungo/internal/core"
+	"tungo/internal/i18n"
 )
 
 func Fetch(from string) ([]core.Node, error) {
@@ -42,7 +43,7 @@ func fetch(from string, client *http.Client) ([]core.Node, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("订阅返回 %s", resp.Status)
+		return nil, fmt.Errorf(i18n.T("订阅返回 %s"), resp.Status)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if err != nil {
@@ -72,7 +73,7 @@ func Parse(data []byte) ([]core.Node, error) {
 		nodes = append(nodes, node)
 	}
 	if len(nodes) == 0 {
-		return nil, errors.New("订阅里没有认得的节点")
+		return nil, errors.New(i18n.T("订阅里没有认得的节点"))
 	}
 	return nodes, nil
 }
@@ -95,7 +96,7 @@ func Link(link string) (core.Node, error) {
 		strings.HasPrefix(link, "http://"), strings.HasPrefix(link, "https://"):
 		return proxy(link)
 	}
-	return core.Node{}, errors.New("不认识的链接")
+	return core.Node{}, errors.New(i18n.T("不认识的链接"))
 }
 
 func proxy(link string) (core.Node, error) {
@@ -105,11 +106,11 @@ func proxy(link string) (core.Node, error) {
 	}
 
 	if u.Path != "" && u.Path != "/" {
-		return core.Node{}, errors.New("不是节点")
+		return core.Node{}, errors.New(i18n.T("不是节点"))
 	}
 	port, err := strconv.Atoi(u.Port())
 	if err != nil {
-		return core.Node{}, errors.New("缺少端口")
+		return core.Node{}, errors.New(i18n.T("缺少端口"))
 	}
 	protocol := "socks"
 	if strings.HasPrefix(u.Scheme, "http") {
@@ -131,7 +132,7 @@ func proxy(link string) (core.Node, error) {
 func vmess(link string) (core.Node, error) {
 	body, ok := decode(strings.TrimPrefix(link, "vmess://"))
 	if !ok {
-		return core.Node{}, errors.New("vmess: 不是 base64")
+		return core.Node{}, errors.New(i18n.T("vmess: 不是 base64"))
 	}
 	var v struct {
 		PS   string          `json:"ps"`
@@ -181,11 +182,11 @@ func vless(link string) (core.Node, error) {
 		return core.Node{}, err
 	}
 	if u.User == nil {
-		return core.Node{}, errors.New("vless: 缺少用户")
+		return core.Node{}, errors.New(i18n.T("vless: 缺少用户"))
 	}
 	port, err := strconv.Atoi(u.Port())
 	if err != nil {
-		return core.Node{}, errors.New("vless: 缺少端口")
+		return core.Node{}, errors.New(i18n.T("vless: 缺少端口"))
 	}
 	q := u.Query()
 	return core.Node{
@@ -216,11 +217,11 @@ func trojan(link string) (core.Node, error) {
 		return core.Node{}, err
 	}
 	if u.User == nil {
-		return core.Node{}, errors.New("trojan: 缺少密码")
+		return core.Node{}, errors.New(i18n.T("trojan: 缺少密码"))
 	}
 	port, err := strconv.Atoi(u.Port())
 	if err != nil {
-		return core.Node{}, errors.New("trojan: 缺少端口")
+		return core.Node{}, errors.New(i18n.T("trojan: 缺少端口"))
 	}
 	q := u.Query()
 	return core.Node{
@@ -251,11 +252,11 @@ func hysteria2(link string) (core.Node, error) {
 		return core.Node{}, err
 	}
 	if u.User == nil {
-		return core.Node{}, errors.New("hysteria2: 缺少密码")
+		return core.Node{}, errors.New(i18n.T("hysteria2: 缺少密码"))
 	}
 	port, err := strconv.Atoi(u.Port())
 	if err != nil {
-		return core.Node{}, errors.New("hysteria2: 缺少端口")
+		return core.Node{}, errors.New(i18n.T("hysteria2: 缺少端口"))
 	}
 	q := u.Query()
 	return core.Node{
@@ -280,11 +281,11 @@ func tuic(link string) (core.Node, error) {
 		return core.Node{}, err
 	}
 	if u.User == nil {
-		return core.Node{}, errors.New("tuic: 缺少凭据")
+		return core.Node{}, errors.New(i18n.T("tuic: 缺少凭据"))
 	}
 	port, err := strconv.Atoi(u.Port())
 	if err != nil {
-		return core.Node{}, errors.New("tuic: 缺少端口")
+		return core.Node{}, errors.New(i18n.T("tuic: 缺少端口"))
 	}
 	uuid := u.User.Username()
 	password, _ := u.User.Password()
@@ -320,24 +321,24 @@ func shadowsocks(link string) (core.Node, error) {
 	if at := strings.LastIndex(body, "@"); at >= 0 {
 		decoded, ok := decode(body[:at])
 		if !ok {
-			return core.Node{}, errors.New("ss: 凭据不是 base64")
+			return core.Node{}, errors.New(i18n.T("ss: 凭据不是 base64"))
 		}
 		credentials, address = decoded, body[at+1:]
 	} else {
 		decoded, ok := decode(body)
 		if !ok {
-			return core.Node{}, errors.New("ss: 不是 base64")
+			return core.Node{}, errors.New(i18n.T("ss: 不是 base64"))
 		}
 		at := strings.LastIndex(decoded, "@")
 		if at < 0 {
-			return core.Node{}, errors.New("ss: 缺少地址")
+			return core.Node{}, errors.New(i18n.T("ss: 缺少地址"))
 		}
 		credentials, address = decoded[:at], decoded[at+1:]
 	}
 
 	method, password, ok := strings.Cut(credentials, ":")
 	if !ok {
-		return core.Node{}, errors.New("ss: 缺少密码")
+		return core.Node{}, errors.New(i18n.T("ss: 缺少密码"))
 	}
 	host, portText, err := net.SplitHostPort(address)
 	if err != nil {
@@ -380,7 +381,7 @@ func number(raw json.RawMessage) (int, error) {
 	}
 	var text string
 	if err := json.Unmarshal(raw, &text); err != nil {
-		return 0, errors.New("端口不是数字")
+		return 0, errors.New(i18n.T("端口不是数字"))
 	}
 	return strconv.Atoi(text)
 }

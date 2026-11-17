@@ -11,6 +11,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"tungo/internal/i18n"
 )
 
 const setupTimeout = 30 * time.Second
@@ -171,7 +173,7 @@ func (s *Server) negotiate(conn net.Conn, br *bufio.Reader) (net.Conn, error) {
 
 	if !slices.Contains(methods, byte(0)) {
 		conn.Write([]byte{socks5, methodNone})
-		return nil, errors.New("socks5: 客户端不支持免认证")
+		return nil, errors.New(i18n.T("socks5: 客户端不支持免认证"))
 	}
 	if _, err := conn.Write([]byte{socks5, 0}); err != nil {
 		return nil, err

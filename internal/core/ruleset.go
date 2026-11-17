@@ -2,11 +2,14 @@ package core
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"tungo/internal/i18n"
 )
 
 const rulesetURL = "https://raw.githubusercontent.com/2dust/sing-box-rules/rule-set-"
@@ -28,7 +31,7 @@ func EnsureRuleSet(entry string, kind Kind) error {
 	k, tag := geoKindTag(entry)
 	dir := ruleSetDir()
 	if dir == "" {
-		return fmt.Errorf("找不到规则集目录")
+		return errors.New(i18n.T("找不到规则集目录"))
 	}
 	if have(entry, kind) {
 		return nil
@@ -40,7 +43,7 @@ func EnsureRuleSet(entry string, kind Kind) error {
 	if ruleSetPath(k+"-"+tag+".srs") == "" {
 		urls := reachable(rulesetURL + k + "/" + k + "-" + tag + ".srs")
 		if len(urls) == 0 {
-			return fmt.Errorf("%s：下载地址都连不上，可在 %s 里换成你能用的镜像", entry, mirrorsFile())
+			return fmt.Errorf(i18n.T("%s：下载地址都连不上，可在 %s 里换成你能用的镜像"), entry, mirrorsFile())
 		}
 		var last error
 		for _, url := range urls {
@@ -56,10 +59,10 @@ func EnsureRuleSet(entry string, kind Kind) error {
 		return nil
 	}
 	if err := decompile(ruleSetPath(k+"-"+tag+".srs"), base); err != nil {
-		return fmt.Errorf("%s：xray 要读文本列表，反编译失败：%w", entry, err)
+		return fmt.Errorf(i18n.T("%s：xray 要读文本列表，反编译失败：%w"), entry, err)
 	}
 	if !have(entry, kind) {
-		return fmt.Errorf("%s：反编译后没有 %s 的列表", entry, tag)
+		return fmt.Errorf(i18n.T("%s：反编译后没有 %s 的列表"), entry, tag)
 	}
 	return nil
 }
@@ -86,7 +89,7 @@ func fetchRuleSet(url, path string) error {
 	file.Close()
 	if err != nil || string(head) != "SRS" {
 		os.Remove(tmp)
-		return fmt.Errorf("%s 不是规则集", url)
+		return fmt.Errorf(i18n.T("%s 不是规则集"), url)
 	}
 	if err := os.Rename(tmp, path); err != nil {
 		os.Remove(tmp)
@@ -155,7 +158,7 @@ func decompile(srs, prefix string) error {
 
 func writeLines(path string, lines []string) error {
 	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644); err != nil {
-		return fmt.Errorf("写 %s: %w", filepath.Base(path), err)
+		return fmt.Errorf(i18n.T("写 %s: %w"), filepath.Base(path), err)
 	}
 	return nil
 }

@@ -94,7 +94,10 @@ func (a *app) ruleForm(c *ui.Context) {
 				ui.Column(c).Gap(gapBase).Children(func() {
 					ui.Row(c).Gap(gapBase).Children(func() {
 						ui.TextInput(c, &a.ruleDraft.Remark).Label(i18n.T("备注")).Grow(1)
-						ui.Select(c, &a.ruleDraft.Out, core.Outs).Label(i18n.T("出口")).Width(140)
+						out := outName(a.ruleDraft.Out)
+						if ui.Select(c, &out, outNames()).Label(i18n.T("出口")).Width(140).Changed() {
+							a.ruleDraft.Out = outOf(out)
+						}
 					})
 					ui.TextArea(c, &a.ruleDomains).Label(i18n.T("域名（geosite:cn、domain:x、full:x、keyword:x、regexp:x）")).Height(96)
 					ui.TextArea(c, &a.ruleIPs).Label(i18n.T("地址（geoip:cn、10.0.0.0/8、1.1.1.1）")).Height(80)
@@ -176,7 +179,7 @@ func (a *app) removeRule(at int) {
 }
 
 func ruleSummary(rule core.Rule) string {
-	remark := rule.Remark
+	remark := i18n.T(rule.Remark)
 	if remark == "" {
 		remark = i18n.T("未命名")
 	}
@@ -196,7 +199,28 @@ func ruleSummary(rule core.Rule) string {
 	if len(rule.Protocol) > 0 {
 		matched = append(matched, strings.Join(rule.Protocol, ","))
 	}
-	return fmt.Sprintf("%s → %s · %s", remark, rule.Out, strings.Join(matched, " "))
+	return fmt.Sprintf("%s → %s · %s", remark, outName(rule.Out), strings.Join(matched, " "))
+}
+
+var outLabels = map[string]string{"proxy": "代理", "direct": "直连", "block": "拦截"}
+
+func outNames() []string {
+	names := make([]string, len(core.Outs))
+	for i, out := range core.Outs {
+		names[i] = outName(out)
+	}
+	return names
+}
+
+func outName(out string) string { return i18n.T(outLabels[out]) }
+
+func outOf(name string) string {
+	for _, out := range core.Outs {
+		if outName(out) == name {
+			return out
+		}
+	}
+	return core.Outs[0]
 }
 
 func (a *app) dnsForm(c *ui.Context) {

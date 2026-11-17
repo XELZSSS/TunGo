@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"tungo/internal/appdir"
+	"tungo/internal/i18n"
 )
 
 type Kind string
@@ -81,7 +83,7 @@ func CleanRun() error {
 
 func resourceBin() (string, error) {
 	if resources == "" {
-		return "", fmt.Errorf("资源目录还没定位")
+		return "", errors.New(i18n.T("资源目录还没定位"))
 	}
 	return filepath.Join(resources, "bin"), nil
 }
@@ -113,7 +115,7 @@ func Binary(kind Kind) (string, error) {
 	if found, err := exec.LookPath(name); err == nil {
 		return found, nil
 	}
-	return "", fmt.Errorf("找不到 %s", name)
+	return "", fmt.Errorf(i18n.T("找不到 %s"), name)
 }
 
 type Kernel struct {
@@ -184,11 +186,11 @@ func (k *Kernel) wait(timeout time.Duration) error {
 		}
 		select {
 		case <-k.done:
-			return fmt.Errorf("已退出：%s", k.lines.tail())
+			return fmt.Errorf(i18n.T("已退出：%s"), k.lines.tail())
 		default:
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("没有起来：%s", k.lines.tail())
+			return fmt.Errorf(i18n.T("没有起来：%s"), k.lines.tail())
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -224,7 +226,7 @@ func Start(kind Kind, n Node, socks string, tun bool) (*Kernel, error) {
 	kind = PickKind(kind, n)
 
 	if !Carries(kind, n) {
-		return nil, fmt.Errorf("%s 带不了 %q", kind, n.Protocol)
+		return nil, fmt.Errorf(i18n.T("%s 带不了 %q"), kind, n.Protocol)
 	}
 	binary, err := Binary(kind)
 	if err != nil {
@@ -260,7 +262,7 @@ func Start(kind Kind, n Node, socks string, tun bool) (*Kernel, error) {
 		if err == nil {
 			if tunName != "" && !waitTun(k, tunName, tunReadyTimeout) {
 				k.Stop()
-				last = fmt.Errorf("TUN 网卡没接管")
+				last = errors.New(i18n.T("TUN 网卡没接管"))
 				cleanTun()
 				continue
 			}
@@ -274,7 +276,7 @@ func Start(kind Kind, n Node, socks string, tun bool) (*Kernel, error) {
 			cleanTun()
 		}
 	}
-	return nil, fmt.Errorf("%s 起不来：%w", kind, last)
+	return nil, fmt.Errorf(i18n.T("%s 起不来：%w"), kind, last)
 }
 
 func retryable(err error, tun bool) bool {

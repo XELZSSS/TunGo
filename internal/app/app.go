@@ -22,7 +22,9 @@ const probeAddr = "1.1.1.1:443"
 
 const keepLogs = 200
 
-var direct = core.Node{Name: "直连（不经节点）", Protocol: "direct"}
+func directNode() core.Node {
+	return core.Node{Name: i18n.T("直连（不经节点）"), Protocol: "direct"}
+}
 
 type app struct {
 	shell
@@ -44,6 +46,8 @@ func newApp() *app {
 	if err := core.CleanRun(); err != nil {
 		log.Print("no clean run: ", err)
 	}
+	remembered, recallErr := loadSettings()
+	i18n.Set(remembered.Lang)
 	nodes, at, err := core.LoadNodes()
 	routes, routeErr := core.LoadRoutingSet()
 	a := &app{
@@ -66,8 +70,6 @@ func newApp() *app {
 		}
 		return a.conns[row].ID
 	}
-	remembered, recallErr := loadSettings()
-	i18n.Set(remembered.Lang)
 	a.skipped, a.shortcuts = remembered.Skipped, remembered.Shortcuts
 	if remembered.Kind != "" {
 		a.kind = remembered.Kind

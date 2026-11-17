@@ -48,7 +48,7 @@ func (a *app) measure(node core.Node, speed bool) (int, float64, error) {
 		}
 	}
 	if ms <= 0 {
-		return -1, 0, errors.New("没有一个是能连上的测速地址")
+		return -1, 0, errors.New(i18n.T("没有一个是能连上的测速地址"))
 	}
 	if !speed {
 		return ms, 0, nil

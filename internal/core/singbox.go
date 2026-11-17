@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"tungo/internal/i18n"
 )
 
 func singBoxInbound(inbound string) (map[string]any, error) {
@@ -45,13 +47,13 @@ func singBoxOutbound(n Node) (map[string]any, error) {
 	if n.Raw != "" {
 		var raw map[string]any
 		if err := json.Unmarshal([]byte(n.Raw), &raw); err != nil {
-			return nil, fmt.Errorf("自定义出站不是 JSON：%w", err)
+			return nil, fmt.Errorf(i18n.T("自定义出站不是 JSON：%w"), err)
 		}
 		raw["tag"] = "proxy"
 		return raw, nil
 	}
 	if !SingBox.Supports(n.Protocol) || n.Direct() {
-		return nil, fmt.Errorf("sing-box 不支持 %q", n.Protocol)
+		return nil, fmt.Errorf(i18n.T("sing-box 不支持 %q"), n.Protocol)
 	}
 	out := map[string]any{
 		"type":        n.Protocol,
@@ -245,7 +247,7 @@ func singBoxRoute(routing Routing) (map[string]any, error) {
 			domains = readLines(ruleSetPath(tag + ".domains.txt"))
 		}
 		if len(domains) == 0 && len(cidrs) == 0 {
-			return "", nil, nil, fmt.Errorf("缺少规则集 %s：把 %s.srs 或 %s.domains.txt / .cidrs.txt 放进 %s", entry, tag, tag, ruleSetDir())
+			return "", nil, nil, fmt.Errorf(i18n.T("缺少规则集 %s：把 %s.srs 或 %s.domains.txt / .cidrs.txt 放进 %s"), entry, tag, tag, ruleSetDir())
 		}
 		return "", domains, cidrs, nil
 	}

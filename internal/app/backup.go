@@ -50,7 +50,7 @@ func (a *app) restoreLatest() {
 		return
 	}
 	a.reloadAll()
-	a.logf(i18n.T("已还原 %s（%s）"), paths[0], strings.Join(restored, "、"))
+	a.logf(i18n.T("已还原 %s（%s）"), paths[0], strings.Join(restored, ", "))
 	a.say(i18n.T("已还原"))
 }
 
@@ -58,6 +58,13 @@ func (a *app) reloadAll() {
 	if a.connected() {
 		a.disconnect()
 	}
+	remembered, err := loadSettings()
+	if err != nil {
+		a.fail(err.Error())
+		a.logf("%s", err)
+		return
+	}
+	i18n.Set(remembered.Lang)
 	nodes, at, err := core.LoadNodes()
 	if err != nil {
 		a.fail(err.Error())
@@ -70,19 +77,12 @@ func (a *app) reloadAll() {
 		a.logf("%s", err)
 		return
 	}
-	remembered, err := loadSettings()
-	if err != nil {
-		a.fail(err.Error())
-		a.logf("%s", err)
-		return
-	}
 
 	a.nodesAt = at
 	a.setNodes(nodes)
 	a.chosen = 0
 	a.subs = sub.Load()
 	a.routes = routes
-	i18n.Set(remembered.Lang)
 	a.skipped, a.shortcuts = remembered.Skipped, remembered.Shortcuts
 	if remembered.Kind != "" {
 		a.kind = remembered.Kind

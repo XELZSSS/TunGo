@@ -9,41 +9,23 @@ import (
 	"tungo/internal/i18n"
 )
 
-var groupStrategies = []struct {
-	strategy string
-	label    string
-}{
-	{"leastPing", "最低延迟"},
-	{"fallback", "故障转移"},
-	{"random", "随机"},
-	{"roundRobin", "轮询"},
-	{"leastLoad", "最低负载"},
-}
-
 func strategyNames() []string {
-	names := make([]string, len(groupStrategies))
-	for i, one := range groupStrategies {
-		names[i] = i18n.T(one.label)
+	names := make([]string, len(core.GroupStrategies))
+	for i, id := range core.GroupStrategies {
+		names[i] = core.StrategyName(id)
 	}
 	return names
 }
 
-func strategyName(strategy string) string {
-	for _, one := range groupStrategies {
-		if one.strategy == strategy {
-			return i18n.T(one.label)
-		}
-	}
-	return i18n.T(groupStrategies[0].label)
-}
+func strategyName(id string) string { return core.StrategyName(id) }
 
 func strategyOf(name string) string {
-	for _, one := range groupStrategies {
-		if i18n.T(one.label) == name {
-			return one.strategy
+	for _, id := range core.GroupStrategies {
+		if core.StrategyName(id) == name {
+			return id
 		}
 	}
-	return groupStrategies[0].strategy
+	return core.GroupStrategies[0]
 }
 
 func (a *app) addGroup() {

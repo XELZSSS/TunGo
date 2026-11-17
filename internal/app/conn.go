@@ -53,7 +53,7 @@ func (a *app) connect() {
 			return
 		}
 		if missing := core.MissingRuleSets(routing, kind); len(missing) > 0 {
-			a.hint(fmt.Sprintf(i18n.T("正在下载规则集：%s"), strings.Join(missing, "、")))
+			a.hint(fmt.Sprintf(i18n.T("正在下载规则集：%s"), strings.Join(missing, ", ")))
 			go a.ensureRules(routing, true)
 			return
 		}

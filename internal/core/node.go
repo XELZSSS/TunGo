@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"tungo/internal/appdir"
+	"tungo/internal/i18n"
 )
 
 var Protocols = []string{
@@ -71,6 +72,21 @@ type Node struct {
 const GroupRole = "group"
 
 var GroupStrategies = []string{"leastPing", "fallback", "random", "roundRobin", "leastLoad"}
+
+var strategyLabels = map[string]string{
+	"leastPing":  "最低延迟",
+	"fallback":   "故障转移",
+	"random":     "随机",
+	"roundRobin": "轮询",
+	"leastLoad":  "最低负载",
+}
+
+func StrategyName(id string) string {
+	if label, ok := strategyLabels[id]; ok {
+		return i18n.T(label)
+	}
+	return i18n.T(strategyLabels[GroupStrategies[0]])
+}
 
 func (n Node) Group() bool { return n.Role == GroupRole }
 
@@ -162,7 +178,7 @@ func (n Node) Where() string {
 
 func (n Node) Summary() string {
 	if n.Group() {
-		return fmt.Sprintf("group · %s · %d", n.StrategyOr(), len(n.Children))
+		return fmt.Sprintf("%s · %s · %d", i18n.T("策略组"), StrategyName(n.StrategyOr()), len(n.Children))
 	}
 	parts := []string{n.Protocol}
 	if n.Network != "" && n.Network != "tcp" {
@@ -175,7 +191,7 @@ func (n Node) Summary() string {
 		parts = append(parts, "→ "+n.Detour.Name)
 	}
 	if n.Raw != "" {
-		parts = append(parts, "custom")
+		parts = append(parts, i18n.T("自定义"))
 	}
 	return strings.Join(parts, " · ")
 }

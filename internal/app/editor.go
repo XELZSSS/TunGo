@@ -183,7 +183,7 @@ func (a *app) commit() {
 	a.draft.Detour = a.detourOf()
 	a.draft.Raw = strings.TrimSpace(a.rawText)
 	if a.draft.Protocol == "direct" {
-		a.draft = direct
+		a.draft = directNode()
 	}
 	if at := a.indexOfNode(a.draftWas); at >= 0 {
 		a.nodes[at] = a.draft
