@@ -8,12 +8,42 @@ import (
 	"sync"
 	"syscall"
 	"unsafe"
+)
 
-	"tungo/internal/spawn"
+const (
+	createNewConsole      = 0x00000010
+	createNewProcessGroup = 0x00000200
+	ctrlBreakEvent        = 1
+	errorAccessDenied     = 5
 )
 
 func prepare(cmd *exec.Cmd) {
-	spawn.Hide(cmd)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: createNewProcessGroup | createNewConsole,
+	}
+}
+
+func stop(cmd *exec.Cmd) {
+	pid := uintptr(cmd.Process.Pid)
+	kernel32 := syscall.NewLazyDLL("kernel32.dll")
+	attach := kernel32.NewProc("AttachConsole")
+	detach := kernel32.NewProc("FreeConsole")
+	send := kernel32.NewProc("GenerateConsoleCtrlEvent")
+
+	ok, _, err := attach.Call(pid)
+	if ok == 0 {
+		if errno, isErrno := err.(syscall.Errno); !isErrno || errno != errorAccessDenied {
+			return
+		}
+
+		detach.Call()
+		if ok, _, _ = attach.Call(pid); ok == 0 {
+			return
+		}
+	}
+	send.Call(ctrlBreakEvent, pid)
+	detach.Call()
 }
 
 func follow(cmd *exec.Cmd) {

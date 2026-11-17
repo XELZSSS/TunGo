@@ -16,7 +16,7 @@ const (
 
 const detourTag = "detour"
 
-func Config(kind Kind, n Node, inbound string, policy Policy, clash string, tun bool) ([]byte, error) {
+func Config(kind Kind, n Node, inbound string, policy Policy, clash, tun string) ([]byte, error) {
 	var config map[string]any
 	switch kind {
 	case SingBox:
@@ -33,8 +33,8 @@ func Config(kind Kind, n Node, inbound string, policy Policy, clash string, tun 
 			return nil, err
 		}
 		inbounds := []any{in}
-		if tun {
-			inbounds = append(inbounds, singBoxTun())
+		if tun != "" {
+			inbounds = append(inbounds, singBoxTun(tun))
 			rules := []any{
 				map[string]any{"action": "sniff"},
 				map[string]any{"protocol": "dns", "action": "hijack-dns"},
@@ -42,7 +42,7 @@ func Config(kind Kind, n Node, inbound string, policy Policy, clash string, tun 
 			route["rules"] = append(rules, route["rules"].([]any)...)
 		}
 		config = map[string]any{
-			"log":      map[string]any{"level": "warn"},
+			"log":      map[string]any{"level": "info"},
 			"dns":      singBoxDNS(policy.DNS, policy.Routing),
 			"inbounds": inbounds,
 			"route":    route,
@@ -65,8 +65,8 @@ func Config(kind Kind, n Node, inbound string, policy Policy, clash string, tun 
 			return nil, err
 		}
 		inbounds := []any{in}
-		if tun {
-			inbounds = append(inbounds, xrayTun())
+		if tun != "" {
+			inbounds = append(inbounds, xrayTun(tun))
 		}
 		routing, err := xrayRouting(policy.Routing, n)
 		if err != nil {

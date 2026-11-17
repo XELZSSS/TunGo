@@ -1,22 +1,17 @@
-# 打包产物与 MyGo 缓存
 /build/
 /.mygo/
 *.syso
 /*.exe
 
-# 随包的内核二进制：体积上百 MB，从上游下载后放进 resources/bin/ 再打包
 /resources/bin/*.exe
 /resources/bin/*.dll
 
-# 旧版留在程序旁的运行数据
 /data/
 
-# 日志与临时文件
 *.log
 *.tmp
 *.restore
 
-# 编辑器与系统文件
 .vscode/
 .idea/
 Thumbs.db

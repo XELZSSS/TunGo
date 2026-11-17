@@ -63,8 +63,10 @@ func Carries(kind Kind, n Node) bool {
 }
 
 const (
-	startTimeout = 15 * time.Second
-	tunTimeout   = 45 * time.Second
+	startTimeout    = 15 * time.Second
+	tunTimeout      = 45 * time.Second
+	tunReadyTimeout = 25 * time.Second
+	stopTimeout     = 5 * time.Second
 )
 
 var resources string
@@ -227,6 +229,7 @@ func Start(kind Kind, n Node, socks string, tun bool) (*Kernel, error) {
 		return nil, err
 	}
 	timeout := startTimeout
+	tunName := ""
 	if tun {
 		timeout = tunTimeout
 		if kind != SingBox {
@@ -234,7 +237,8 @@ func Start(kind Kind, n Node, socks string, tun bool) (*Kernel, error) {
 				return nil, err
 			}
 		}
-		resetTun()
+		cleanTun()
+		tunName = tunInterface
 	}
 	var last error
 	for attempt := 0; attempt < 2; attempt++ {
@@ -242,12 +246,18 @@ func Start(kind Kind, n Node, socks string, tun bool) (*Kernel, error) {
 		if kind == SingBox {
 			clash = "127.0.0.1:0"
 		}
-		config, err := Config(kind, n, socks, policy, clash, tun)
+		config, err := Config(kind, n, socks, policy, clash, tunName)
 		if err != nil {
 			return nil, err
 		}
 		k, err := launch(kind, binary, n, socks, config, timeout)
 		if err == nil {
+			if tunName != "" && !waitTun(k, tunName, tunReadyTimeout) {
+				k.Stop()
+				last = fmt.Errorf("TUN 网卡没接管")
+				cleanTun()
+				continue
+			}
 			return k, nil
 		}
 		last = err
@@ -255,7 +265,7 @@ func Start(kind Kind, n Node, socks string, tun bool) (*Kernel, error) {
 			break
 		}
 		if tun {
-			resetTun()
+			cleanTun()
 		}
 	}
 	return nil, fmt.Errorf("%s 起不来：%w", kind, last)
@@ -273,14 +283,28 @@ func (k *Kernel) Kind() Kind { return k.kind }
 
 func (k *Kernel) Done() <-chan struct{} { return k.done }
 
+func (k *Kernel) exited() bool {
+	select {
+	case <-k.done:
+		return true
+	default:
+		return false
+	}
+}
+
 func (k *Kernel) SocksAddr() string { return k.socks }
 
 func (k *Kernel) Output() string { return k.lines.tail() }
 
 func (k *Kernel) Stop() {
 	k.once.Do(func() {
-		k.cmd.Process.Kill()
-		<-k.done
+		stop(k.cmd)
+		select {
+		case <-k.done:
+		case <-time.After(stopTimeout):
+			k.cmd.Process.Kill()
+			<-k.done
+		}
 		os.Remove(k.path)
 	})
 }

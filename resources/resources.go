@@ -1,4 +1,3 @@
-// Package resources holds the images the app draws and the packagers copy.
 package resources
 
 import "embed"

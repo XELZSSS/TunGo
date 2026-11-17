@@ -11,7 +11,6 @@ import (
 	"tungo/internal/sub"
 )
 
-// shell：窗口、托盘、主题，以及跨渲染周期传递的剪贴板与延迟任务。
 type shell struct {
 	win       *mygo.Window
 	tray      *mygo.Tray
@@ -22,7 +21,6 @@ type shell struct {
 	queued    []func()
 }
 
-// lists：节点表与连接表的选择、滚动和分栏状态。
 type lists struct {
 	list     ui.ListState
 	connList ui.ListState
@@ -35,7 +33,6 @@ type lists struct {
 	rowAt    int
 }
 
-// servers：节点清单与当前选中的内核、端口、延迟和测速结果。
 type servers struct {
 	nodes   []core.Node
 	nodesAt string
@@ -46,7 +43,6 @@ type servers struct {
 	speed   []float64
 }
 
-// feedback：提示条、忙碌标记与日志面板。
 type feedback struct {
 	notice     string
 	noticeKind noticeKind
@@ -56,7 +52,6 @@ type feedback struct {
 	logScroll  ui.ScrollState
 }
 
-// subscriptions：订阅清单与订阅表单。
 type subscriptions struct {
 	subs           sub.State
 	subNote        string
@@ -69,7 +64,6 @@ type subscriptions struct {
 	subInterval    string
 }
 
-// kernels：内核二进制的安装、版本与更新状态。
 type kernels struct {
 	installing string
 	installAt  string
@@ -82,7 +76,6 @@ type kernels struct {
 	updating   bool
 }
 
-// hotkeys：全局热键的绑定与编辑。
 type hotkeys struct {
 	shortcuts        map[string]string
 	shortcutShowKey  string
@@ -91,7 +84,6 @@ type hotkeys struct {
 	editingShortcuts bool
 }
 
-// forms：节点与策略组表单的草稿。
 type forms struct {
 	editing       bool
 	draft         core.Node
@@ -109,7 +101,6 @@ type forms struct {
 	groupNote     string
 }
 
-// routing：路由配置、规则与 DNS 的编辑状态。
 type routing struct {
 	routes           core.RoutingSet
 	editingRoute     bool
@@ -136,7 +127,6 @@ type routing struct {
 	dnsSplit         string
 }
 
-// link：连接本身——本地代理、内核进程、PAC 服务和流量统计。
 type link struct {
 	local   *proxy.Server
 	kernel  *core.Kernel

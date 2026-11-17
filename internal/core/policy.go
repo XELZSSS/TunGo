@@ -142,7 +142,7 @@ func DefaultRoutingSet() RoutingSet {
 }
 
 func LoadRoutingSet() (RoutingSet, error) {
-	set := DefaultRoutingSet()
+	var set RoutingSet
 	err := read("routing.json", &set)
 	if len(set.Items) == 0 {
 		set = DefaultRoutingSet()

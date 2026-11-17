@@ -12,3 +12,7 @@ func prepare(cmd *exec.Cmd) {
 }
 
 func follow(cmd *exec.Cmd) {}
+
+func stop(cmd *exec.Cmd) {
+	cmd.Process.Signal(syscall.SIGINT)
+}

@@ -26,13 +26,13 @@ func xrayInbound(inbound string) (map[string]any, error) {
 	}, nil
 }
 
-func xrayTun() map[string]any {
+func xrayTun(name string) map[string]any {
 	return map[string]any{
 		"tag":      tunTag,
 		"protocol": "tun",
 		"settings": map[string]any{
-			"name":                   tunInterface,
-			"desc":                   tunInterface,
+			"name":                   name,
+			"desc":                   name,
 			"address":                []any{tunAddress},
 			"mtu":                    tunMTU,
 			"autoSystemRoutingTable": []any{"0.0.0.0/0", "::/0"},

@@ -27,11 +27,11 @@ func singBoxInbound(inbound string) (map[string]any, error) {
 	}, nil
 }
 
-func singBoxTun() map[string]any {
+func singBoxTun(name string) map[string]any {
 	return map[string]any{
 		"type":           "tun",
 		"tag":            tunTag,
-		"interface_name": tunInterface,
+		"interface_name": name,
 		"address":        []any{tunAddress},
 		"mtu":            tunMTU,
 		"stack":          "system",
