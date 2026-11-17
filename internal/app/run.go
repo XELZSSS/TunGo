@@ -131,7 +131,7 @@ func (a *app) quit() {
 	if err := a.clearSysProxy(); err != nil {
 		log.Print(err)
 	}
-	a.stopLocal()
+	a.detach().close()
 }
 
 func (a *app) setUpTray() {

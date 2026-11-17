@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"time"
 
@@ -37,7 +38,12 @@ type app struct {
 }
 
 func newApp() *app {
-	core.WriteMirrors()
+	if err := core.WriteMirrors(); err != nil {
+		log.Print("no mirrors: ", err)
+	}
+	if err := core.CleanRun(); err != nil {
+		log.Print("no clean run: ", err)
+	}
 	nodes, at, err := core.LoadNodes()
 	routes, routeErr := core.LoadRoutingSet()
 	a := &app{
@@ -205,4 +211,42 @@ func (a *app) update(fn func()) {
 func (a *app) sync() {
 	a.update(func() {})
 	a.refreshTray()
+}
+
+func (a *app) appendNodes(nodes ...core.Node) {
+	for range nodes {
+		a.ms = append(a.ms, -1)
+		a.speed = append(a.speed, 0)
+	}
+	a.nodes = append(a.nodes, nodes...)
+	a.rev++
+}
+
+func (a *app) dropNode(i int) {
+	a.nodes = append(a.nodes[:i], a.nodes[i+1:]...)
+	a.ms = append(a.ms[:i], a.ms[i+1:]...)
+	a.speed = append(a.speed[:i], a.speed[i+1:]...)
+	if a.chosen == i {
+		a.chosen = 0
+	} else if a.chosen > i {
+		a.chosen--
+	}
+	a.rev++
+}
+
+func (a *app) swapNodes(i, to int) {
+	a.nodes[i], a.nodes[to] = a.nodes[to], a.nodes[i]
+	a.ms[i], a.ms[to] = a.ms[to], a.ms[i]
+	a.speed[i], a.speed[to] = a.speed[to], a.speed[i]
+	a.rev++
+}
+
+func (a *app) setNodes(nodes []core.Node) {
+	a.nodes = nodes
+	a.ms = make([]int, len(nodes))
+	a.speed = make([]float64, len(nodes))
+	for i := range a.ms {
+		a.ms[i] = -1
+	}
+	a.rev++
 }

@@ -8,13 +8,13 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
 	"tungo/internal/core"
 	"tungo/internal/i18n"
-	"tungo/internal/spawn"
 	"tungo/internal/sub"
 )
 
@@ -188,9 +188,7 @@ func (a *app) commit() {
 	if at := a.indexOfNode(a.draftWas); at >= 0 {
 		a.nodes[at] = a.draft
 	} else {
-		a.nodes = append(a.nodes, a.draft)
-		a.ms = append(a.ms, -1)
-		a.speed = append(a.speed, 0)
+		a.appendNodes(a.draft)
 		a.chosen = len(a.nodes) - 1
 	}
 	a.save()
@@ -333,12 +331,7 @@ func (a *app) removeSub(name string) {
 			kept = append(kept, node)
 		}
 	}
-	a.nodes = kept
-	a.ms = make([]int, len(a.nodes))
-	a.speed = make([]float64, len(a.nodes))
-	for i := range a.ms {
-		a.ms[i] = -1
-	}
+	a.setNodes(kept)
 	if a.chosen >= len(a.nodes) {
 		a.chosen = 0
 	}
@@ -371,7 +364,7 @@ func (a *app) reveal(path string) {
 		open = "open"
 	}
 	cmd := exec.Command(open, dir)
-	spawn.Hide(cmd)
+	core.Hide(cmd)
 	if err := cmd.Start(); err != nil {
 		a.logf(i18n.T("打不开目录：%s"), err)
 	}
@@ -390,7 +383,7 @@ func (a *app) rebootAsAdmin() {
 	script := fmt.Sprintf("Wait-Process -Id %d -ErrorAction SilentlyContinue; Start-Process -FilePath '%s' -Verb RunAs",
 		os.Getpid(), strings.ReplaceAll(exe, "'", "''"))
 	cmd := exec.Command("powershell", "-NoProfile", "-Command", script)
-	spawn.Hide(cmd)
+	core.Hide(cmd)
 	if err := cmd.Start(); err != nil {
 		a.fail(err.Error())
 		a.logf(i18n.T("提不起权限：%s"), err)
@@ -421,6 +414,9 @@ func (a *app) refreshProxied(name string) {
 				return
 			}
 			a.replaceNodes(name, nodes)
+			if kept := a.subs.Item(name); kept != nil {
+				kept.Updated = time.Now()
+			}
 			a.subNote = fmt.Sprintf(i18n.T("已更新：%d 个节点"), len(nodes))
 			a.logf(i18n.T("订阅更新（%s，经代理）：%d 个节点"), name, len(nodes))
 			a.saveSubs()

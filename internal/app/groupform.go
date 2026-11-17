@@ -145,9 +145,7 @@ func (a *app) commitGroup() {
 		group.Sub = a.nodes[at].Sub
 		a.nodes[at] = group
 	} else {
-		a.nodes = append(a.nodes, group)
-		a.ms = append(a.ms, -1)
-		a.speed = append(a.speed, 0)
+		a.appendNodes(group)
 		a.chosen = len(a.nodes) - 1
 	}
 	a.groupNote = ""

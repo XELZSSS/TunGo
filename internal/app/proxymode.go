@@ -80,10 +80,19 @@ func proxyName(mode sysproxy.Mode) string {
 	return i18n.T("不改变系统代理")
 }
 
+var (
+	proxyNamesAt    string
+	proxyNamesCache []string
+)
+
 func proxyNames() []string {
+	if proxyNamesAt == i18n.Lang() && proxyNamesCache != nil {
+		return proxyNamesCache
+	}
 	names := make([]string, len(sysproxy.Modes))
 	for i, mode := range sysproxy.Modes {
 		names[i] = proxyName(mode)
 	}
+	proxyNamesAt, proxyNamesCache = i18n.Lang(), names
 	return names
 }

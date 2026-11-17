@@ -113,7 +113,19 @@ var (
 	}
 )
 
+var listThemes = map[*ui.Theme]*ui.Theme{
+	lightTheme: listOf(lightTheme),
+	darkTheme:  listOf(darkTheme),
+}
+
 func listTheme(t *ui.Theme) *ui.Theme {
+	if one, ok := listThemes[t]; ok {
+		return one
+	}
+	return listOf(t)
+}
+
+func listOf(t *ui.Theme) *ui.Theme {
 	one := *t
 	one.Accent = t.SurfacePressed
 	one.AccentHover = t.SurfacePressed

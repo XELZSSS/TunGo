@@ -31,14 +31,10 @@ func (a *app) menuBar(c *ui.Context, t *ui.Theme) {
 					}
 				}
 			}
+			names := proxyNames()
 			want := proxyName(sysproxy.Mode(a.proxy))
-			if ui.Select(c, &want, proxyNames()).Width(controlWider).Disabled(a.tun && a.connected()).Changed() {
-				for i, name := range proxyNames() {
-					if name == want {
-						a.proxy = string(sysproxy.Modes[i])
-						break
-					}
-				}
+			if ui.Select(c, &want, names).Width(controlWider).Disabled(a.tun && a.connected()).Changed() {
+				a.proxy = string(sysproxy.Modes[indexOf(names, want)])
 				a.applySysProxy()
 				a.saveSettings()
 			}
@@ -319,12 +315,7 @@ func (a *app) importClipboard(c *ui.Context) {
 		a.logf(i18n.T("导入失败：%s"), err)
 		return
 	}
-	a.nodes = append(a.nodes, nodes...)
-	a.ms = append(a.ms, make([]int, len(nodes))...)
-	a.speed = append(a.speed, make([]float64, len(nodes))...)
-	for i := range a.ms {
-		a.ms[i] = -1
-	}
+	a.appendNodes(nodes...)
 	a.save()
 	a.say(fmt.Sprintf(i18n.T("已导入 %d 个节点"), len(nodes)))
 }
@@ -371,14 +362,7 @@ func (a *app) remove(i int) {
 		return
 	}
 	name := a.nodes[i].Name
-	a.nodes = append(a.nodes[:i], a.nodes[i+1:]...)
-	a.ms = append(a.ms[:i], a.ms[i+1:]...)
-	a.speed = append(a.speed[:i], a.speed[i+1:]...)
-	if a.chosen == i {
-		a.chosen = 0
-	} else if a.chosen > i {
-		a.chosen--
-	}
+	a.dropNode(i)
 	a.save()
 	a.logf(i18n.T("已删除节点：%s"), name)
 	if a.connected() {
@@ -392,14 +376,13 @@ func (a *app) move(i, by int) {
 	if i < 0 || i >= len(a.nodes) || to < 0 || to >= len(a.nodes) {
 		return
 	}
-	a.nodes[i], a.nodes[to] = a.nodes[to], a.nodes[i]
-	a.ms[i], a.ms[to] = a.ms[to], a.ms[i]
-	a.speed[i], a.speed[to] = a.speed[to], a.speed[i]
+	a.swapNodes(i, to)
 	a.chosen = to
 	a.save()
 }
 
 func (a *app) save() {
+	a.rev++
 	a.prune()
 	if err := core.SaveNodes(a.nodes); err != nil {
 		a.fail(err.Error())
@@ -435,13 +418,8 @@ func (a *app) reload() {
 	if a.connected() {
 		a.disconnect()
 	}
-	a.nodes = nodes
+	a.setNodes(nodes)
 	a.chosen = 0
-	a.ms = make([]int, len(nodes))
-	a.speed = make([]float64, len(nodes))
-	for i := range a.ms {
-		a.ms[i] = -1
-	}
 	a.logf(i18n.T("已重新加载 %d 个节点"), len(nodes))
 }
 

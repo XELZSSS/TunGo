@@ -83,6 +83,21 @@ func (n Node) StrategyOr() string {
 
 func (n Node) Direct() bool { return n.Protocol == "direct" }
 
+func (n Node) NeedsPin() bool {
+	if n.Raw != "" {
+		return false
+	}
+	if n.Pinned != "" {
+		return true
+	}
+	for _, member := range n.Members {
+		if member.NeedsPin() {
+			return true
+		}
+	}
+	return n.Detour != nil && n.Detour.NeedsPin()
+}
+
 func (k Kind) Supports(protocol string) bool {
 	switch protocol {
 	case "direct":
@@ -127,7 +142,7 @@ func SaveNodes(nodes []Node) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o600)
+	return appdir.WriteFile(path, data, 0o600)
 }
 
 func nodesPath() (string, error) {

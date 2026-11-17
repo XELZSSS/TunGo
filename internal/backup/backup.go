@@ -15,6 +15,8 @@ import (
 
 const maxEntry = 8 << 20
 
+const keep = 10
+
 var files = []string{
 	"nodes.json", "subscription.json", "settings.json",
 	"routing.json", "dns.json", "mirrors.txt",
@@ -66,7 +68,26 @@ func Make() (string, error) {
 	if err := z.Close(); err != nil {
 		return "", err
 	}
+	if err := prune(); err != nil {
+		return "", err
+	}
 	return path, nil
+}
+
+func prune() error {
+	paths, err := List()
+	if err != nil {
+		return err
+	}
+	if len(paths) <= keep {
+		return nil
+	}
+	for _, old := range paths[keep:] {
+		if err := os.Remove(old); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func List() ([]string, error) {

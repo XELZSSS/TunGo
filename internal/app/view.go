@@ -338,6 +338,9 @@ func (a *app) toolBar(c *ui.Context, t *ui.Theme) {
 		}
 		groups := a.groupNames()
 		at := indexOf(groups, a.group)
+		if at < 0 {
+			at = 0
+		}
 		if ui.Segmented(c, &at, groups...).Changed() {
 			a.group = ""
 			if at > 0 {

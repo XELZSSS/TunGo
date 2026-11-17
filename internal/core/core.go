@@ -23,9 +23,7 @@ const (
 	Auto Kind = "auto"
 )
 
-var Kinds = []Kind{SingBox, Xray}
-
-var Choices = append([]Kind{Auto}, Kinds...)
+var Choices = []Kind{Auto, SingBox, Xray}
 
 func PickKind(kind Kind, n Node) Kind {
 	if kind != Auto {
@@ -72,6 +70,14 @@ const (
 var resources string
 
 func SetResources(dir string) { resources = dir }
+
+func CleanRun() error {
+	run, err := appdir.Sub("run")
+	if err != nil {
+		return err
+	}
+	return os.RemoveAll(run)
+}
 
 func resourceBin() (string, error) {
 	if resources == "" {

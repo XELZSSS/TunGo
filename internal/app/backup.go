@@ -77,13 +77,9 @@ func (a *app) reloadAll() {
 		return
 	}
 
-	a.nodes, a.nodesAt = nodes, at
+	a.nodesAt = at
+	a.setNodes(nodes)
 	a.chosen = 0
-	a.ms = make([]int, len(nodes))
-	a.speed = make([]float64, len(nodes))
-	for i := range a.ms {
-		a.ms[i] = -1
-	}
 	a.subs = sub.Load()
 	a.routes = routes
 	i18n.Set(remembered.Lang)

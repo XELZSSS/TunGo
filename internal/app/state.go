@@ -28,7 +28,10 @@ type lists struct {
 	panePct  float32
 	tab      int
 	group    string
+	groups   []string
+	groupsAt groupsKey
 	shown    []int
+	rowsAt   rowsKey
 	row      int
 	rowAt    int
 }
@@ -41,6 +44,7 @@ type servers struct {
 	port    string
 	ms      []int
 	speed   []float64
+	rev     int
 }
 
 type feedback struct {
@@ -131,6 +135,7 @@ type link struct {
 	local   *proxy.Server
 	kernel  *core.Kernel
 	stop    chan struct{}
+	drain   chan struct{}
 	pac     *http.Server
 	proxy   string
 	tun     bool

@@ -1,6 +1,7 @@
 package appdir
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -48,4 +49,12 @@ func Sub(name string) (string, error) {
 	}
 	d = filepath.Join(d, name)
 	return d, os.MkdirAll(d, 0o755)
+}
+
+func WriteFile(path string, data []byte, perm fs.FileMode) error {
+	fresh := path + ".tmp"
+	if err := os.WriteFile(fresh, data, perm); err != nil {
+		return err
+	}
+	return os.Rename(fresh, path)
 }

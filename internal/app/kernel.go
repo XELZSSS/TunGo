@@ -39,8 +39,17 @@ func (a *app) know(kind core.Kind) {
 		return
 	}
 	a.versionFor = kind
-	a.version = core.Version(kind)
+	a.version = ""
 	a.latest = ""
+	go func() {
+		version := core.Version(kind)
+		a.update(func() {
+			if a.versionFor != kind {
+				return
+			}
+			a.version = version
+		})
+	}()
 }
 
 func (a *app) check() {
@@ -135,8 +144,9 @@ func (a *app) upgrade() {
 			}
 			a.have = nil
 			a.latest = ""
-			a.version = core.Version(kind)
-			a.event(i18n.T("%s 已更新到 %s"), kind, a.version)
+			a.versionFor = ""
+			a.know(kind)
+			a.event(i18n.T("%s 已更新"), kind)
 			back()
 		})
 	}()
@@ -164,9 +174,9 @@ func (a *app) install() {
 			}
 			a.say(fmt.Sprintf(i18n.T("%s 已装好，可以连接了"), name))
 			a.have = nil
-			a.versionFor = kind
-			a.version = core.Version(kind)
-			a.event(i18n.T("%s 已装好（%s）"), name, a.version)
+			a.versionFor = ""
+			a.know(kind)
+			a.event(i18n.T("%s 已装好"), name)
 		})
 	}()
 }

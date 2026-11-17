@@ -112,7 +112,7 @@ func xrayStream(n Node) map[string]any {
 	case "tls":
 		tls := map[string]any{"serverName": serverName(n)}
 		if alpn := alpnOf(n); len(alpn) > 0 {
-			tls["alpn"] = anyOf(alpn)
+			tls["alpn"] = alpn
 		}
 		if n.ECH != "" && !strings.Contains(n.ECH, "://") {
 			tls["echConfigList"] = n.ECH
@@ -167,7 +167,7 @@ func xrayDNS(dns DNS, routing Routing) map[string]any {
 	servers := []any{}
 	if values := suffixDomains(directSuffixes(routing)); len(values) > 0 {
 		servers = append(servers, map[string]any{
-			"address": dns.Direct, "domains": anyOf(values), "skipFallback": true,
+			"address": dns.Direct, "domains": values, "skipFallback": true,
 		})
 	}
 	for _, one := range dns.Split {
@@ -175,7 +175,7 @@ func xrayDNS(dns DNS, routing Routing) map[string]any {
 			continue
 		}
 		servers = append(servers, map[string]any{
-			"address": one.Server, "domains": anyOf(suffixDomains(one.Domains)),
+			"address": one.Server, "domains": suffixDomains(one.Domains),
 		})
 	}
 	servers = append(servers, map[string]any{"address": dns.Remote})
@@ -239,7 +239,7 @@ func xrayRouting(routing Routing, n Node) (map[string]any, error) {
 			base["network"] = strings.Join(network, ",")
 		}
 		if len(rule.Protocol) > 0 {
-			base["protocol"] = anyOf(rule.Protocol)
+			base["protocol"] = rule.Protocol
 		}
 		emit := func(key string, value any) {
 			one := map[string]any{}
@@ -275,10 +275,10 @@ func xrayRouting(routing Routing, n Node) (map[string]any, error) {
 			return nil, fmt.Errorf("xray 的 IP 规则展开后为空：%s 缺少对应的 geoip 列表", strings.Join(rule.IP, "、"))
 		}
 		if len(domains) > 0 {
-			emit("domain", anyOf(domains))
+			emit("domain", domains)
 		}
 		if len(ips) > 0 {
-			emit("ip", anyOf(ips))
+			emit("ip", ips)
 		}
 		if len(rule.Domain) == 0 && len(rule.IP) == 0 {
 			rules = append(rules, base)

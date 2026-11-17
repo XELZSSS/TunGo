@@ -74,14 +74,14 @@ func (a *app) measure(node core.Node, speed bool) (int, float64, error) {
 }
 
 func roundTrip(client *http.Client, url string) int {
-	if _, err := fetch(client, url); err != nil {
+	if _, err := getBody(client, url); err != nil {
 		return -1
 	}
 	best := -1
 	for i := 0; i < 2; i++ {
 		time.Sleep(100 * time.Millisecond)
 		start := time.Now()
-		if _, err := fetch(client, url); err != nil {
+		if _, err := getBody(client, url); err != nil {
 			return -1
 		}
 		if elapsed := int(time.Since(start).Milliseconds()); best < 0 || elapsed < best {
@@ -91,7 +91,7 @@ func roundTrip(client *http.Client, url string) int {
 	return best
 }
 
-func fetch(client *http.Client, url string) (int64, error) {
+func getBody(client *http.Client, url string) (int64, error) {
 	resp, err := client.Get(url)
 	if err != nil {
 		return 0, err
@@ -112,6 +112,7 @@ func (a *app) realPing(i int) {
 			if i >= len(a.ms) {
 				return
 			}
+			a.rev++
 			if err != nil {
 				a.ms[i] = -1
 				a.logf(i18n.T("%s：%s"), node.Name, err)
@@ -135,6 +136,7 @@ func (a *app) speedTest(i int) {
 			if i >= len(a.ms) {
 				return
 			}
+			a.rev++
 			if err != nil {
 				a.speed[i] = 0
 				a.logf(i18n.T("%s：%s"), node.Name, err)

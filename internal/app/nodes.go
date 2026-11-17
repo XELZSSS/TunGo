@@ -65,17 +65,13 @@ func (a *app) replaceNodes(name string, nodes []core.Node) {
 			kept = append(kept, node)
 		}
 	}
-	a.nodes = append(kept, nodes...)
+	a.setNodes(append(kept, nodes...))
+	a.chosen = 0
 	for i, node := range a.nodes {
 		if sameNode(node, was) {
 			a.chosen = i
 			break
 		}
-	}
-	a.ms = make([]int, len(a.nodes))
-	a.speed = make([]float64, len(a.nodes))
-	for i := range a.ms {
-		a.ms[i] = -1
 	}
 	if a.connected() && !sameNode(a.node(), was) {
 		a.connect()
@@ -112,8 +108,14 @@ func (a *app) probe() {
 		return
 	}
 	a.logf("%s", i18n.T("开始测速"))
-	for i := range a.nodes {
-		a.pingNode(i)
+	gate := make(chan struct{}, probeWorkers)
+	for i, node := range a.nodes {
+		addr := nodeAddr(node)
+		go func(i int, addr string) {
+			gate <- struct{}{}
+			a.pingAt(i, addr)
+			<-gate
+		}(i, addr)
 	}
 }
 
@@ -121,24 +123,29 @@ func (a *app) pingNode(i int) {
 	if i < 0 || i >= len(a.nodes) {
 		return
 	}
-	node := a.nodes[i]
-	addr := probeAddr
-	if !node.Direct() {
-		addr = net.JoinHostPort(node.Server, fmt.Sprint(node.Port))
+	go a.pingAt(i, nodeAddr(a.nodes[i]))
+}
+
+func nodeAddr(node core.Node) string {
+	if node.Direct() {
+		return probeAddr
 	}
-	go func() {
-		start := time.Now()
-		ms := -1
-		if conn, err := net.DialTimeout("tcp", addr, 3*time.Second); err == nil {
-			conn.Close()
-			ms = int(time.Since(start).Milliseconds())
+	return net.JoinHostPort(node.Server, fmt.Sprint(node.Port))
+}
+
+func (a *app) pingAt(i int, addr string) {
+	start := time.Now()
+	ms := -1
+	if conn, err := net.DialTimeout("tcp", addr, 3*time.Second); err == nil {
+		conn.Close()
+		ms = int(time.Since(start).Milliseconds())
+	}
+	a.update(func() {
+		if i < len(a.ms) {
+			a.ms[i] = ms
+			a.rev++
 		}
-		a.update(func() {
-			if i < len(a.ms) {
-				a.ms[i] = ms
-			}
-		})
-	}()
+	})
 }
 
 func indexOf(list []string, want string) int {
@@ -147,10 +154,14 @@ func indexOf(list []string, want string) int {
 			return i
 		}
 	}
-	return 0
+	return -1
 }
 
 func (a *app) groupNames() []string {
+	key := groupsKey{rev: a.rev, lang: i18n.Lang()}
+	if a.groups != nil && key == a.groupsAt {
+		return a.groups
+	}
 	names := []string{i18n.T("全部")}
 	seen := map[string]bool{}
 	for _, node := range a.nodes {
@@ -164,10 +175,18 @@ func (a *app) groupNames() []string {
 	if a.group != "" && !seen[a.group] {
 		a.group = ""
 	}
+	a.groupsAt, a.groups = key, names
 	return names
 }
 
 func (a *app) syncRows() {
+	key := rowsKey{rev: a.rev, group: a.group}
+	if order := a.list.Sort; order != nil {
+		key.column, key.descending = order.Column, order.Descending
+	}
+	if a.shown != nil && key == a.rowsAt {
+		return
+	}
 	shown := a.shown[:0]
 	for i, node := range a.nodes {
 		if a.group != "" && groupName(node) != a.group {
@@ -177,6 +196,7 @@ func (a *app) syncRows() {
 	}
 	a.shown = shown
 	a.sortRows()
+	a.rowsAt = key
 }
 
 func (a *app) rowOf(node int) int {
@@ -362,4 +382,18 @@ func (a *app) updateSubs(names []string) {
 			a.saveSubs()
 		})
 	}()
+}
+
+const probeWorkers = 12
+
+type rowsKey struct {
+	rev        int
+	group      string
+	column     string
+	descending bool
+}
+
+type groupsKey struct {
+	rev  int
+	lang string
 }

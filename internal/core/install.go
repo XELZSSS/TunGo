@@ -3,7 +3,10 @@ package core
 import (
 	"archive/tar"
 	"archive/zip"
+	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -193,7 +196,7 @@ func Install(kind Kind, tag string, progress func(part, whole int64)) (string, e
 	defer os.Remove(temp.Name())
 	defer temp.Close()
 
-	if err := download(github, temp, progress); err != nil {
+	if err := download(kind, github, temp, progress); err != nil {
 		return "", err
 	}
 
@@ -264,7 +267,7 @@ func platform(kind Kind) (string, error) {
 	return name, nil
 }
 
-func download(github string, to *os.File, progress func(part, whole int64)) error {
+func download(kind Kind, github string, to *os.File, progress func(part, whole int64)) error {
 	urls := reachable(github)
 	if len(urls) == 0 {
 		return fmt.Errorf("下载地址都连不上，可在 %s 里换成你能用的镜像", mirrorsFile())
@@ -284,13 +287,59 @@ func download(github string, to *os.File, progress func(part, whole int64)) erro
 				return checkErr
 			}
 			if ok {
-				return nil
+				if err = verify(kind, github, to); err == nil {
+					return nil
+				}
+			} else {
+				err = fmt.Errorf("%s：返回的不是安装包", url)
 			}
-			err = fmt.Errorf("%s：返回的不是安装包", url)
 		}
 		last = err
 	}
 	return last
+}
+
+func verify(kind Kind, github string, from *os.File) error {
+	if kind != Xray {
+		return nil
+	}
+	want, err := digest(github + ".dgst")
+	if err != nil {
+		return err
+	}
+	if _, err := from.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+	sum := sha256.New()
+	if _, err := io.Copy(sum, from); err != nil {
+		return err
+	}
+	if got := hex.EncodeToString(sum.Sum(nil)); got != want {
+		return fmt.Errorf("%s：SHA256 对不上（%s）", github, got)
+	}
+	return nil
+}
+
+func digest(url string) (string, error) {
+	urls := reachable(url)
+	if len(urls) == 0 {
+		return "", fmt.Errorf("%s 连不上", url)
+	}
+	var last error
+	for _, one := range urls {
+		var body bytes.Buffer
+		if err := fetch(one, &body, nil); err != nil {
+			last = err
+			continue
+		}
+		for _, line := range strings.Split(body.String(), "\n") {
+			if value, ok := strings.CutPrefix(strings.TrimSpace(line), "SHA256="); ok {
+				return strings.ToLower(strings.TrimSpace(value)), nil
+			}
+		}
+		last = fmt.Errorf("%s：没有 SHA256", one)
+	}
+	return "", last
 }
 
 type answer struct {
@@ -405,12 +454,12 @@ func transport() *http.Transport {
 	}
 }
 
-func WriteMirrors() {
+func WriteMirrors() error {
 	path := mirrorsFile()
 	if _, err := os.Stat(path); err == nil {
-		return
+		return nil
 	}
-	_ = os.WriteFile(path, []byte(defaultMirrors), 0o600)
+	return os.WriteFile(path, []byte(defaultMirrors()), 0o600)
 }
 
 func mirrorList() []string {
@@ -435,14 +484,19 @@ func mirrorList() []string {
 	return out
 }
 
-const defaultMirrors = `# 内核下载走哪些地址，一行一个，按顺序试。
+func defaultMirrors() string {
+	lines := make([]string, 0, len(mirrors))
+	for _, mirror := range mirrors {
+		if mirror == "" {
+			mirror = "github"
+		}
+		lines = append(lines, mirror)
+	}
+	return `# 内核下载走哪些地址，一行一个，按顺序试。
 # github 表示直连 GitHub（放在最后，前面都不行时才用它）。
 # 换成你能用的镜像即可，例如公司内网的文件代理。
-https://ghfast.top/
-https://ghproxy.cn/
-https://gh-proxy.com/
-github
-`
+` + strings.Join(lines, "\n") + "\n"
+}
 
 func mirrorsFile() string {
 	d, err := appdir.Dir()

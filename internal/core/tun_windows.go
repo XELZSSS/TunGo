@@ -3,8 +3,6 @@ package core
 import (
 	"fmt"
 	"os/exec"
-
-	"tungo/internal/spawn"
 )
 
 func resetTun() {
@@ -14,6 +12,6 @@ Get-PnpDevice -Class Net -ErrorAction SilentlyContinue | Where-Object {
 } | ForEach-Object { & pnputil /remove-device $_.InstanceId | Out-Null }
 `, tunInterface)
 	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
-	spawn.Hide(cmd)
+	Hide(cmd)
 	cmd.Run()
 }

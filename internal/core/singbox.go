@@ -114,7 +114,7 @@ func singBoxTLS(n Node) map[string]any {
 		tls["insecure"] = true
 	}
 	if alpn := alpnOf(n); len(alpn) > 0 {
-		tls["alpn"] = anyOf(alpn)
+		tls["alpn"] = alpn
 	}
 	if n.ECH != "" && !strings.Contains(n.ECH, "://") {
 		tls["ech"] = singBoxECH(n.ECH)
@@ -206,7 +206,7 @@ func singBoxDNS(dns DNS, routing Routing) map[string]any {
 		servers = append(servers, map[string]any{
 			"type": "hosts", "tag": "hosts", "predefined": predefined,
 		})
-		rules = append(rules, map[string]any{"domain": anyOf(names), "server": "hosts"})
+		rules = append(rules, map[string]any{"domain": names, "server": "hosts"})
 	}
 	if dns.BlockAAAA {
 
@@ -256,17 +256,17 @@ func singBoxRoute(routing Routing) (map[string]any, error) {
 		base := map[string]any{"outbound": rule.Out}
 		if ports, ranges := rule.Ports(); len(ports) > 0 || len(ranges) > 0 {
 			if len(ports) > 0 {
-				base["port"] = anyOfInt(ports)
+				base["port"] = ports
 			}
 			if len(ranges) > 0 {
-				base["port_range"] = anyOf(ranges)
+				base["port_range"] = ranges
 			}
 		}
 		if network := rule.NetworkList(); len(network) > 0 {
-			base["network"] = anyOf(network)
+			base["network"] = network
 		}
 		if len(rule.Protocol) > 0 {
-			base["protocol"] = anyOf(rule.Protocol)
+			base["protocol"] = rule.Protocol
 		}
 
 		emit := func(key string, value any) {
@@ -317,12 +317,12 @@ func singBoxRoute(routing Routing) (map[string]any, error) {
 			value any
 			on    bool
 		}{
-			{"domain_suffix", anyOf(suffix), len(suffix) > 0},
-			{"domain", anyOf(full), len(full) > 0},
-			{"domain_keyword", anyOf(keyword), len(keyword) > 0},
-			{"domain_regex", anyOf(regex), len(regex) > 0},
-			{"rule_set", anyOf(ruleSets), len(ruleSets) > 0},
-			{"ip_cidr", anyOf(ips), len(ips) > 0},
+			{"domain_suffix", suffix, len(suffix) > 0},
+			{"domain", full, len(full) > 0},
+			{"domain_keyword", keyword, len(keyword) > 0},
+			{"domain_regex", regex, len(regex) > 0},
+			{"rule_set", ruleSets, len(ruleSets) > 0},
+			{"ip_cidr", ips, len(ips) > 0},
 			{"ip_is_private", true, private},
 		} {
 			if one.on {

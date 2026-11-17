@@ -240,7 +240,7 @@ func writePolicy(name string, v any) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o600)
+	return appdir.WriteFile(path, data, 0o600)
 }
 
 func policyPath(name string) (string, error) {

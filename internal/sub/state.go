@@ -44,11 +44,7 @@ func Save(state State) error {
 	if err != nil {
 		return err
 	}
-	fresh := path + ".tmp"
-	if err := os.WriteFile(fresh, data, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(fresh, path)
+	return appdir.WriteFile(path, data, 0o600)
 }
 
 func (s State) Item(name string) *Item {

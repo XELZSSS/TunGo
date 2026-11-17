@@ -58,17 +58,27 @@ func (a *app) connect() {
 			return
 		}
 		a.know(kind)
+		if kind == core.SingBox && node.NeedsPin() {
+			a.logf(i18n.T("sing-box 不支持证书 pin，已忽略：%s"), node.Name)
+		}
 	}
-	a.stopLocal()
 
+	wait, prev := a.drain, a.detach()
+	a.drain = nil
 	a.tries++
+	ticket := a.tries
 	a.busy = true
 	a.hint(i18n.T("正在启动内核…"))
 	a.event(i18n.T("启动 %s：%s"), kind, node.Name)
-	go a.launch(kind, node, tun, a.tries)
+	go a.launch(wait, prev, kind, node, tun, ticket)
 }
 
-func (a *app) launch(kind core.Kind, node core.Node, tun bool, ticket int) {
+func (a *app) launch(wait <-chan struct{}, prev running, kind core.Kind, node core.Node, tun bool, ticket int) {
+	if wait != nil {
+		<-wait
+	}
+	prev.close()
+
 	var kernel *core.Kernel
 	if !node.Direct() {
 		started, err := core.Start(kind, node, coreSocks, tun)
@@ -110,7 +120,6 @@ func (a *app) launch(kind core.Kind, node core.Node, tun bool, ticket int) {
 	}
 	a.update(func() {
 		if ticket != a.tries {
-
 			if local != nil {
 				local.Close()
 			}
@@ -139,31 +148,47 @@ func (a *app) launch(kind core.Kind, node core.Node, tun bool, ticket int) {
 	})
 }
 
-func (a *app) stopLocal() {
-	if a.local != nil {
-		a.local.Close()
-		a.local = nil
+type running struct {
+	local  *proxy.Server
+	kernel *core.Kernel
+	stop   chan struct{}
+}
+
+func (r running) close() {
+	if r.stop != nil {
+		close(r.stop)
 	}
-	if a.stop != nil {
-		close(a.stop)
-		a.stop = nil
+	if r.local != nil {
+		r.local.Close()
 	}
-	if a.kernel != nil {
-		a.kernel.Stop()
-		a.kernel = nil
+	if r.kernel != nil {
+		r.kernel.Stop()
 	}
+}
+
+func (a *app) detach() running {
+	held := running{local: a.local, kernel: a.kernel, stop: a.stop}
+	a.local, a.kernel, a.stop = nil, nil, nil
+	return held
 }
 
 func (a *app) disconnect() {
 	was := a.connected()
-
 	a.tries++
 	a.busy = false
 	if err := a.clearSysProxy(); err != nil {
 		a.fail(err.Error())
 		a.logf(i18n.T("系统代理：%s"), err)
 	}
-	a.stopLocal()
+	held := a.detach()
+	if held.local != nil || held.kernel != nil || held.stop != nil {
+		done := make(chan struct{})
+		a.drain = done
+		go func() {
+			held.close()
+			close(done)
+		}()
+	}
 	a.up, a.down = 0, 0
 	a.conns = nil
 	if was {
@@ -183,7 +208,6 @@ func (a *app) watch(stop <-chan struct{}, local *proxy.Server, kernel *core.Kern
 		case <-stop:
 			return
 		case <-gone:
-
 			a.update(func() {
 				if a.kernel != kernel {
 					return
@@ -199,7 +223,7 @@ func (a *app) watch(stop <-chan struct{}, local *proxy.Server, kernel *core.Kern
 			if local != nil {
 				up, down = local.Stats()
 			}
-			if kernel != nil {
+			if kernel != nil && kernel.Kind() == core.SingBox {
 				atUp, atDown, list, err := kernel.Sessions()
 				if err == nil {
 					conns = list

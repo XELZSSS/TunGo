@@ -11,6 +11,8 @@ func prepare(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}
 }
 
+func Hide(cmd *exec.Cmd) {}
+
 func follow(cmd *exec.Cmd) {}
 
 func stop(cmd *exec.Cmd) {

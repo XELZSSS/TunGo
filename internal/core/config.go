@@ -89,7 +89,7 @@ func Config(kind Kind, n Node, inbound string, policy Policy, clash, tun string)
 	default:
 		return nil, fmt.Errorf("core: no config for %q", kind)
 	}
-	return json.MarshalIndent(config, "", "  ")
+	return json.Marshal(config)
 }
 
 const (
@@ -141,11 +141,11 @@ func serverName(n Node) string {
 	return n.Server
 }
 
-func hosts(n Node) []any {
+func hosts(n Node) []string {
 	if n.Host != "" {
-		return []any{n.Host}
+		return []string{n.Host}
 	}
-	return []any{serverName(n)}
+	return []string{serverName(n)}
 }
 
 func hostName(n Node) string {
@@ -175,14 +175,6 @@ func earlyData(path string) (string, int) {
 		return path, 0
 	}
 	return path[:i], size
-}
-
-func anyOf(values []string) []any {
-	out := make([]any, len(values))
-	for i, value := range values {
-		out[i] = value
-	}
-	return out
 }
 
 func dnsServer(tag, address, detour string) map[string]any {
@@ -215,14 +207,6 @@ func splitDNS(address string) (scheme, host, path string) {
 		return "", address, ""
 	}
 	return u.Scheme, u.Host, u.Path
-}
-
-func anyOfInt(values []int) []any {
-	out := make([]any, 0, len(values))
-	for _, v := range values {
-		out = append(out, v)
-	}
-	return out
 }
 
 func directSuffixes(routing Routing) []string {
@@ -261,16 +245,16 @@ func domainRule(entries []string, server string) map[string]any {
 	suffix, full, keyword, regex := domainsOf(entries)
 	rule := map[string]any{"server": server}
 	if len(suffix) > 0 {
-		rule["domain_suffix"] = anyOf(suffix)
+		rule["domain_suffix"] = suffix
 	}
 	if len(full) > 0 {
-		rule["domain"] = anyOf(full)
+		rule["domain"] = full
 	}
 	if len(keyword) > 0 {
-		rule["domain_keyword"] = anyOf(keyword)
+		rule["domain_keyword"] = keyword
 	}
 	if len(regex) > 0 {
-		rule["domain_regex"] = anyOf(regex)
+		rule["domain_regex"] = regex
 	}
 	if len(rule) == 1 {
 		return nil
