@@ -89,7 +89,13 @@ func resourceBin() (string, error) {
 	return filepath.Join(resources, "bin"), nil
 }
 
-func binDir() (string, error) { return appdir.Sub("bin") }
+func binDir() (string, error) {
+	d, err := appdir.Dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(d, "bin"), nil
+}
 
 func bins() []string {
 	var dirs []string
@@ -321,6 +327,7 @@ type ring struct {
 	mu    sync.Mutex
 	keep  int
 	lines []string
+	next  int
 	clash string
 }
 
@@ -335,10 +342,12 @@ func (r *ring) Write(p []byte) (int, error) {
 		if addr := clashAddrIn(line); addr != "" {
 			r.clash = addr
 		}
-		if len(r.lines) == r.keep {
-			r.lines = r.lines[1:]
+		if len(r.lines) < r.keep {
+			r.lines = append(r.lines, line)
+			continue
 		}
-		r.lines = append(r.lines, line)
+		r.lines[r.next] = line
+		r.next = (r.next + 1) % r.keep
 	}
 	return len(p), nil
 }
@@ -346,7 +355,12 @@ func (r *ring) Write(p []byte) (int, error) {
 func (r *ring) tail() string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return strings.Join(r.lines, "\n")
+	if len(r.lines) < r.keep {
+		return strings.Join(r.lines, "\n")
+	}
+	ordered := make([]string, 0, r.keep)
+	ordered = append(ordered, r.lines[r.next:]...)
+	return strings.Join(append(ordered, r.lines[:r.next]...), "\n")
 }
 
 func (r *ring) api() string {

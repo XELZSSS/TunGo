@@ -60,7 +60,7 @@ func cachedList(path string, parse func([]string) []string) []string {
 			return kept.lines
 		}
 	}
-	lines := parse(readLines(path))
+	lines := parse(rawLines(path))
 	lists.Store(path, fileList{at: info.ModTime(), size: info.Size(), lines: lines})
 	return lines
 }
@@ -79,9 +79,18 @@ func domainFile(path string) []string {
 		return out
 	})
 }
-
-func cidrFile(path string) []string {
-	return cachedList(path, func(lines []string) []string { return lines })
+func rawLines(path string) []string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, line := range strings.Split(string(data), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			out = append(out, line)
+		}
+	}
+	return out
 }
 
 func xrayGeo(entries []string) (domains []string) {
@@ -99,7 +108,7 @@ func xrayGeoIPs(entries []string) (cidrs []string) {
 	for _, entry := range entries {
 		if kind, tag := geoKindTag(entry); kind == "geoip" {
 			if path := ruleSetPath("geoip-" + tag + ".cidrs.txt"); path != "" {
-				cidrs = append(cidrs, cidrFile(path)...)
+				cidrs = append(cidrs, fileLines(path)...)
 			}
 		}
 	}

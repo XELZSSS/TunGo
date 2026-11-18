@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -242,9 +241,9 @@ func singBoxRoute(routing Routing) (map[string]any, error) {
 			return tag, nil, nil, nil
 		}
 		if kind == "geoip" {
-			cidrs = readLines(ruleSetPath(tag + ".cidrs.txt"))
+			cidrs = fileLines(ruleSetPath(tag + ".cidrs.txt"))
 		} else {
-			domains = readLines(ruleSetPath(tag + ".domains.txt"))
+			domains = fileLines(ruleSetPath(tag + ".domains.txt"))
 		}
 		if len(domains) == 0 && len(cidrs) == 0 {
 			return "", nil, nil, fmt.Errorf(i18n.T("缺少规则集 %s：把 %s.srs 或 %s.domains.txt / .cidrs.txt 放进 %s"), entry, tag, tag, ruleSetDir())
@@ -337,16 +336,6 @@ func singBoxRoute(routing Routing) (map[string]any, error) {
 	}, nil
 }
 
-func readLines(path string) []string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-	var out []string
-	for _, line := range strings.Split(string(data), "\n") {
-		if line = strings.TrimSpace(line); line != "" {
-			out = append(out, line)
-		}
-	}
-	return out
+func fileLines(path string) []string {
+	return cachedList(path, func(lines []string) []string { return lines })
 }

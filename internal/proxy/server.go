@@ -24,7 +24,7 @@ type Server struct {
 	up, down atomic.Int64
 
 	mu     sync.Mutex
-	conns  []net.Conn
+	conns  map[net.Conn]struct{}
 	closed bool
 }
 
@@ -33,7 +33,7 @@ func Listen(addr string, dial Dialer) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{ln: ln, dial: dial}
+	s := &Server{ln: ln, dial: dial, conns: map[net.Conn]struct{}{}}
 	go s.serve()
 	return s, nil
 }
@@ -51,8 +51,8 @@ func (s *Server) Close() error {
 	s.conns = nil
 	s.mu.Unlock()
 
-	for _, c := range conns {
-		c.Close()
+	for conn := range conns {
+		conn.Close()
 	}
 	return err
 }
@@ -62,7 +62,7 @@ func (s *Server) serve() {
 	for {
 		conn, err := s.ln.Accept()
 		if err != nil {
-			if s.isClosed() {
+			if errors.Is(err, net.ErrClosed) {
 				return
 			}
 			var netErr net.Error
@@ -85,31 +85,20 @@ func (s *Server) serve() {
 	}
 }
 
-func (s *Server) isClosed() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.closed
-}
-
 func (s *Server) track(conn net.Conn) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
 		return false
 	}
-	s.conns = append(s.conns, conn)
+	s.conns[conn] = struct{}{}
 	return true
 }
 
 func (s *Server) untrack(conn net.Conn) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i, c := range s.conns {
-		if c == conn {
-			s.conns = append(s.conns[:i], s.conns[i+1:]...)
-			return
-		}
-	}
+	delete(s.conns, conn)
 }
 
 func (s *Server) handle(conn net.Conn) {

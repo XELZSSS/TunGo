@@ -18,8 +18,6 @@ type Conn struct {
 	Host    string
 	Chain   string
 	Started time.Time
-	Up      int64
-	Down    int64
 }
 
 func (k *Kernel) CloseConnections() error {
@@ -97,8 +95,6 @@ func (k *Kernel) Sessions() (up, down int64, list []Conn, err error) {
 			Host:    host,
 			Chain:   strings.Join(one.Chains, " → "),
 			Started: started,
-			Up:      one.Upload,
-			Down:    one.Download,
 		})
 	}
 	return body.Upload, body.Download, list, nil

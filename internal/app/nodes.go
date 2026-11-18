@@ -63,7 +63,9 @@ func (a *app) saveSubs() {
 }
 
 func (a *app) autoUpdate() {
-	for range time.Tick(time.Minute) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
 		a.update(func() {
 			if a.subBusy {
 				return
@@ -84,14 +86,20 @@ func (a *app) probe() {
 		return
 	}
 	a.logf("%s", i18n.T("开始测速"))
-	gate := make(chan struct{}, probeWorkers)
-	for _, node := range a.nodes {
+	jobs := make(chan core.Node)
+	for range probeWorkers {
 		go func() {
-			gate <- struct{}{}
-			defer func() { <-gate }()
-			a.pingAt(node)
+			for node := range jobs {
+				a.pingAt(node)
+			}
 		}()
 	}
+	go func() {
+		defer close(jobs)
+		for _, node := range a.nodes {
+			jobs <- node
+		}
+	}()
 }
 
 func (a *app) pingNode(i int) {

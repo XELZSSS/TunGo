@@ -32,12 +32,11 @@ const (
 
 type release struct {
 	repo string
-	tag  string
 }
 
 var releases = map[Kind]release{
-	SingBox: {repo: "SagerNet/sing-box", tag: "v1.14.4"},
-	Xray:    {repo: "XTLS/Xray-core", tag: "v26.10.31"},
+	SingBox: {repo: "SagerNet/sing-box"},
+	Xray:    {repo: "XTLS/Xray-core"},
 }
 
 func Latest(kind Kind) (string, error) {

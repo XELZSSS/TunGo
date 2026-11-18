@@ -393,17 +393,20 @@ func (a *app) save() {
 }
 
 func (a *app) prune() {
+	real := make(map[string]bool, len(a.nodes))
+	for _, node := range a.nodes {
+		if !node.Group() {
+			real[node.Name] = true
+		}
+	}
 	for i := range a.nodes {
 		if !a.nodes[i].Group() {
 			continue
 		}
 		kept := make([]string, 0, len(a.nodes[i].Children))
 		for _, name := range a.nodes[i].Children {
-			for j := range a.nodes {
-				if j != i && a.nodes[j].Name == name && !a.nodes[j].Group() {
-					kept = append(kept, name)
-					break
-				}
+			if real[name] {
+				kept = append(kept, name)
 			}
 		}
 		a.nodes[i].Children = kept
