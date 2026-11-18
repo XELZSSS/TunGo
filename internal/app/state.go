@@ -72,6 +72,13 @@ type kernels struct {
 	updating   bool
 }
 
+type releases struct {
+	pending    *mygo.Update
+	polling    bool
+	installing bool
+	progress   string
+}
+
 type hotkeys struct {
 	shortcuts        map[string]string
 	shortcutShowKey  string
@@ -123,21 +130,24 @@ type routing struct {
 	dnsBlockAAAA     bool
 	dnsHosts         string
 	dnsSplit         string
+	routeWas         core.Routing
+	dnsWas           core.DNS
 }
 
 type link struct {
-	local    *proxy.Server
-	kernel   *core.Kernel
-	stop     chan struct{}
-	drain    chan struct{}
-	pac      *http.Server
-	proxy    string
-	proxyOn  string
-	tun      bool
-	applied  string
-	port     int
-	upRaw    int64
-	downRaw  int64
-	upBase   int64
-	downBase int64
+	local       *proxy.Server
+	kernel      *core.Kernel
+	stop        chan struct{}
+	drain       chan struct{}
+	pac         *http.Server
+	proxy       string
+	proxyOn     string
+	tun         bool
+	applied     string
+	port        int
+	ignoreRules bool
+	upRaw       int64
+	downRaw     int64
+	upBase      int64
+	downBase    int64
 }

@@ -33,14 +33,12 @@ func Config(kind Kind, n Node, inbound string, policy Policy, clash, secret, tun
 			return nil, err
 		}
 		inbounds := []any{in}
+		rules := []any{map[string]any{"action": "sniff"}}
 		if tun != "" {
 			inbounds = append(inbounds, singBoxTun(tun))
-			rules := []any{
-				map[string]any{"action": "sniff"},
-				map[string]any{"protocol": "dns", "action": "hijack-dns"},
-			}
-			route["rules"] = append(rules, route["rules"].([]any)...)
+			rules = append(rules, map[string]any{"protocol": "dns", "action": "hijack-dns"})
 		}
+		route["rules"] = append(rules, route["rules"].([]any)...)
 		config = map[string]any{
 			"log":      map[string]any{"level": "info"},
 			"dns":      singBoxDNS(policy.DNS, policy.Routing),
@@ -172,7 +170,11 @@ func earlyData(path string) (string, int) {
 	if i < 0 {
 		return path, 0
 	}
-	size, err := strconv.Atoi(path[i+len("?ed="):])
+	value := path[i+len("?ed="):]
+	if j := strings.IndexByte(value, '&'); j >= 0 {
+		value = value[:j]
+	}
+	size, err := strconv.Atoi(value)
 	if err != nil {
 		return path, 0
 	}

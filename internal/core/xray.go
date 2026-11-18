@@ -25,6 +25,7 @@ func xrayInbound(inbound string) (map[string]any, error) {
 		"port":     number,
 		"protocol": "socks",
 		"settings": map[string]any{"auth": "noauth", "udp": true},
+		"sniffing": map[string]any{"enabled": true, "destOverride": []any{"http", "tls", "quic"}, "routeOnly": false},
 	}, nil
 }
 
@@ -100,7 +101,7 @@ func xrayOutbound(n Node) (map[string]any, error) {
 			"password": n.Password,
 		}}}
 	}
-	if carriesTLS(n.Protocol) || carriesTransport(n.Protocol) {
+	if carriesTLS(n.Protocol) || carriesTransport(n.Protocol) || ((n.Protocol == "socks" || n.Protocol == "http") && SecurityOf(n) != "") {
 		if stream := xrayStream(n); len(stream) > 0 {
 			out["streamSettings"] = stream
 		}
@@ -124,10 +125,6 @@ func xrayStream(n Node) map[string]any {
 		}
 		if n.Fingerprint != "" {
 			tls["fingerprint"] = n.Fingerprint
-		}
-
-		if n.Insecure {
-			tls["allowInsecure"] = true
 		}
 		stream["security"] = "tls"
 		stream["tlsSettings"] = tls
@@ -182,7 +179,7 @@ func xrayDNS(dns DNS, routing Routing) map[string]any {
 	}
 	servers = append(servers, map[string]any{"address": dns.Remote})
 	strategy := xrayStrategy(dns.Strategy)
-	if dns.BlockAAAA && strategy != "UseIPv6" {
+	if dns.BlockAAAA {
 		strategy = "UseIPv4"
 	}
 	out := map[string]any{
@@ -244,10 +241,15 @@ func xrayRouting(routing Routing, n Node) (map[string]any, error) {
 			base["protocol"] = rule.Protocol
 		}
 		var domains, ips []string
+		var missing []string
 		for _, entry := range rule.Domain {
 			switch {
 			case strings.HasPrefix(entry, "geosite:"):
-				domains = append(domains, xrayGeo([]string{entry})...)
+				found := xrayGeo([]string{entry})
+				if len(found) == 0 {
+					missing = append(missing, entry)
+				}
+				domains = append(domains, found...)
 			case strings.HasPrefix(entry, "full:"), strings.HasPrefix(entry, "keyword:"),
 				strings.HasPrefix(entry, "regexp:"), strings.HasPrefix(entry, "domain:"):
 				domains = append(domains, entry)
@@ -260,7 +262,14 @@ func xrayRouting(routing Routing, n Node) (map[string]any, error) {
 				ips = append(ips, entry)
 				continue
 			}
-			ips = append(ips, xrayGeoIPs([]string{entry})...)
+			found := xrayGeoIPs([]string{entry})
+			if len(found) == 0 {
+				missing = append(missing, entry)
+			}
+			ips = append(ips, found...)
+		}
+		if len(missing) > 0 {
+			return nil, fmt.Errorf(i18n.T("xray 的地理规则展开后为空：%s 缺少对应的 geosite/geoip 列表"), strings.Join(missing, ", "))
 		}
 		if len(rule.Domain) > 0 && len(domains) == 0 {
 			return nil, fmt.Errorf(i18n.T("xray 的域名规则展开后为空：%s 缺少对应的 geosite 列表"), strings.Join(rule.Domain, ", "))
@@ -278,7 +287,7 @@ func xrayRouting(routing Routing, n Node) (map[string]any, error) {
 			rules = append(rules, base)
 		}
 	}
-	final := map[string]any{"type": "field", "port": "0-65535"}
+	final := map[string]any{"type": "field", "network": "tcp,udp"}
 	for key, value := range out(routing.FinalTag()) {
 		final[key] = value
 	}

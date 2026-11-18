@@ -13,6 +13,8 @@ import (
 )
 
 func (a *app) connect() {
+	ignore := a.ignoreRules
+	a.ignoreRules = false
 	if a.busy {
 		return
 	}
@@ -53,9 +55,12 @@ func (a *app) connect() {
 			return
 		}
 		if missing := core.MissingRuleSets(routing, kind); len(missing) > 0 {
-			a.hint(fmt.Sprintf(i18n.T("正在下载规则集：%s"), strings.Join(missing, ", ")))
-			go a.ensureRules(routing, true)
-			return
+			if !ignore {
+				a.hint(fmt.Sprintf(i18n.T("正在下载规则集：%s"), strings.Join(missing, ", ")))
+				go a.ensureRules(routing, kind, rulesConnect)
+				return
+			}
+			a.logf(i18n.T("已忽略缺失的规则集：%s"), strings.Join(missing, ", "))
 		}
 		a.know(kind)
 		if kind == core.SingBox && node.NeedsPin() {
@@ -70,10 +75,10 @@ func (a *app) connect() {
 	a.busy = true
 	a.hint(i18n.T("正在启动内核…"))
 	a.event(i18n.T("启动 %s：%s"), kind, node.Name)
-	go a.launch(wait, prev, kind, node, tun, ticket)
+	go a.launch(wait, prev, kind, node, a.port, tun, ticket)
 }
 
-func (a *app) launch(wait <-chan struct{}, prev running, kind core.Kind, node core.Node, tun bool, ticket int) {
+func (a *app) launch(wait <-chan struct{}, prev running, kind core.Kind, node core.Node, port int, tun bool, ticket int) {
 	if wait != nil {
 		<-wait
 	}
@@ -81,7 +86,7 @@ func (a *app) launch(wait <-chan struct{}, prev running, kind core.Kind, node co
 
 	var kernel *core.Kernel
 	if !node.Direct() {
-		socks, err := freeAddr()
+		socks, err := kernelInbound()
 		if err != nil {
 			a.settle(ticket, func() {
 				a.busy = false
@@ -108,10 +113,10 @@ func (a *app) launch(wait <-chan struct{}, prev running, kind core.Kind, node co
 		if kernel != nil {
 			dialer = &proxy.Upstream{Addr: kernel.SocksAddr()}
 		}
-		opened, err := proxy.Listen(listenAddr(a.port), dialer)
-		if err != nil && a.port > 0 {
+		opened, err := proxy.Listen(listenAddr(port), dialer)
+		if err != nil && port > 0 {
 			if opened, err = proxy.Listen("127.0.0.1:0", dialer); err == nil {
-				note = fmt.Sprintf(i18n.T("本地端口 %d 已被占用，这次改用 %s"), a.port, opened.Addr())
+				note = fmt.Sprintf(i18n.T("本地端口 %d 已被占用，这次改用 %s"), port, opened.Addr())
 			}
 		}
 		if err != nil {
@@ -142,6 +147,9 @@ func (a *app) launch(wait <-chan struct{}, prev running, kind core.Kind, node co
 		a.local = local
 		a.stop = make(chan struct{})
 		a.notice = ""
+		if kind == core.Xray && node.SkipsVerify() {
+			a.hint(fmt.Sprintf(i18n.T("xray 不支持跳过证书校验，这个节点多半连不上：%s"), node.Name))
+		}
 		if note != "" {
 			a.logf("%s", note)
 		}
@@ -215,6 +223,8 @@ func (a *app) disconnect() {
 func (a *app) watch(stop <-chan struct{}, local *proxy.Server, kernel *core.Kernel) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
+	var lastUp, lastDown int64
+	lastConns := -1
 	for {
 		var gone <-chan struct{}
 		if kernel != nil {
@@ -239,7 +249,7 @@ func (a *app) watch(stop <-chan struct{}, local *proxy.Server, kernel *core.Kern
 			if local != nil {
 				up, down = local.Stats()
 			}
-			if kernel != nil && kernel.Kind() == core.SingBox {
+			if kernel != nil && (local == nil || kernel.Kind() == core.SingBox) {
 				atUp, atDown, list, err := kernel.Sessions()
 				if err == nil {
 					conns = list
@@ -248,12 +258,25 @@ func (a *app) watch(stop <-chan struct{}, local *proxy.Server, kernel *core.Kern
 					}
 				}
 			}
+			if up == lastUp && down == lastDown && len(conns) == lastConns {
+				continue
+			}
+			lastUp, lastDown, lastConns = up, down, len(conns)
 			a.update(func() {
 				a.upRaw, a.downRaw = up, down
 				a.conns = conns
 			})
 		}
 	}
+}
+
+func kernelInbound() (string, error) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return "", err
+	}
+	defer l.Close()
+	return l.Addr().String(), nil
 }
 
 func listenAddr(port int) string {

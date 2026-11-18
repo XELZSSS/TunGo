@@ -22,11 +22,11 @@ const pacScript = `function FindProxyForURL(url, host) {
   return "PROXY %s;DIRECT;";
 }`
 
-func (a *app) startPac() (string, error) {
+func (a *app) startPac(addr string) (string, error) {
 	a.stopPac()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-ns-proxy-autoconfig")
-		fmt.Fprintf(w, pacScript, a.localAddr())
+		fmt.Fprintf(w, pacScript, addr)
 	})
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

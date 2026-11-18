@@ -8,7 +8,7 @@ import (
 	"tungo/internal/i18n"
 )
 
-func (a *app) kernelKind() core.Kind { return core.PickKind(core.Kind(a.kind), a.node()) }
+func (a *app) kernelKind() core.Kind { return core.PickKind(core.Kind(a.kind)) }
 
 func (a *app) kernelLabel() string {
 	if a.updating {
@@ -151,7 +151,7 @@ func (a *app) upgrade() {
 	}()
 }
 
-func (a *app) install() {
+func (a *app) diagnose() {
 	kind := a.kernelKind()
 	if a.installed(kind) {
 		a.say(fmt.Sprintf(i18n.T("%s 已就绪，可以连接了"), kind))

@@ -112,6 +112,18 @@ func (n Node) NeedsPin() bool {
 	return n.Detour != nil && n.Detour.NeedsPin()
 }
 
+func (n Node) SkipsVerify() bool {
+	if n.Insecure {
+		return true
+	}
+	for _, member := range n.Members {
+		if member.SkipsVerify() {
+			return true
+		}
+	}
+	return n.Detour != nil && n.Detour.SkipsVerify()
+}
+
 func (k Kind) Supports(protocol string) bool {
 	switch protocol {
 	case "direct":

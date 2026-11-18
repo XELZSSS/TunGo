@@ -2,7 +2,10 @@
 
 package core
 
-import "os/exec"
+import (
+	"os"
+	"os/exec"
+)
 
 func prepare(cmd *exec.Cmd) {}
 
@@ -10,4 +13,6 @@ func Hide(cmd *exec.Cmd) {}
 
 func follow(cmd *exec.Cmd) {}
 
-func stop(cmd *exec.Cmd) {}
+func stop(cmd *exec.Cmd) {
+	cmd.Process.Signal(os.Interrupt)
+}

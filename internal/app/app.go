@@ -27,6 +27,7 @@ type app struct {
 	feedback
 	subscriptions
 	kernels
+	releases
 	hotkeys
 	forms
 	routing
@@ -98,7 +99,7 @@ func (a *app) loadAll() error {
 	a.port = remembered.Port
 	a.applied = remembered.Applied
 	if a.applied != "" {
-		if err := sysproxy.Clear(); err == nil {
+		if err := sysproxy.Reset(); err == nil {
 			a.applied = ""
 			a.saveSettings()
 			a.logf("%s", i18n.T("上次的系统代理没清干净，已还原"))

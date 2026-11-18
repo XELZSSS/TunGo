@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"tungo/internal/i18n"
 )
@@ -119,8 +120,16 @@ func Newer(tag, version string) bool {
 
 func fields(version string) []int {
 	version = strings.TrimPrefix(version, "v")
+	if i := strings.IndexFunc(version, func(r rune) bool {
+		return !unicode.IsDigit(r) && r != '.'
+	}); i >= 0 {
+		version = version[:i]
+	}
 	var out []int
-	for _, part := range strings.Split(version, ".") {
+	for _, part := range strings.Split(strings.TrimSuffix(version, "."), ".") {
+		if part == "" {
+			continue
+		}
 		number, err := strconv.Atoi(part)
 		if err != nil {
 			return nil
@@ -142,7 +151,10 @@ func Install(kind Kind, tag string, progress func(part, whole int64)) (string, e
 		return "", err
 	}
 	url := githubURL + releases[kind].repo + "/releases/download/" + tag + "/" + archive
-	want := assetDigest(kind, tag, archive)
+	want, err := assetDigest(kind, tag, archive)
+	if err != nil {
+		return "", err
+	}
 	if want == "" {
 		log.Print("no digest for ", archive)
 	}
@@ -233,11 +245,11 @@ func platform(kind Kind) (string, error) {
 	return name, nil
 }
 
-func assetDigest(kind Kind, tag, name string) string {
+func assetDigest(kind Kind, tag, name string) (string, error) {
 	url := githubAPI + releases[kind].repo + "/releases/tags/" + tag
 	var body bytes.Buffer
 	if err := fetch(url, &body, nil); err != nil {
-		return ""
+		return "", err
 	}
 	var got struct {
 		Assets []struct {
@@ -246,14 +258,14 @@ func assetDigest(kind Kind, tag, name string) string {
 		} `json:"assets"`
 	}
 	if err := json.Unmarshal(body.Bytes(), &got); err != nil {
-		return ""
+		return "", err
 	}
 	for _, asset := range got.Assets {
 		if asset.Name == name {
-			return strings.TrimPrefix(asset.Digest, "sha256:")
+			return strings.TrimPrefix(asset.Digest, "sha256:"), nil
 		}
 	}
-	return ""
+	return "", nil
 }
 
 func verify(want, url string, from *os.File) error {

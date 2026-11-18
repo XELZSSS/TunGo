@@ -11,15 +11,19 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"tungo/internal/i18n"
 )
 
-const setupTimeout = 30 * time.Second
+const (
+	setupTimeout = 30 * time.Second
+	idleTimeout  = 5 * time.Minute
+)
 
 type Server struct {
 	ln   net.Listener
 	dial Dialer
+
+	ctx    context.Context
+	cancel context.CancelFunc
 
 	up, down atomic.Int64
 
@@ -33,7 +37,8 @@ func Listen(addr string, dial Dialer) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{ln: ln, dial: dial, conns: map[net.Conn]struct{}{}}
+	ctx, cancel := context.WithCancel(context.Background())
+	s := &Server{ln: ln, dial: dial, ctx: ctx, cancel: cancel, conns: map[net.Conn]struct{}{}}
 	go s.serve()
 	return s, nil
 }
@@ -44,6 +49,7 @@ func (s *Server) Stats() (up, down int64) { return s.up.Load(), s.down.Load() }
 
 func (s *Server) Close() error {
 	err := s.ln.Close()
+	s.cancel()
 
 	s.mu.Lock()
 	s.closed = true
@@ -126,17 +132,24 @@ func (s *Server) socks(conn net.Conn, br *bufio.Reader) {
 		conn.Close()
 		return
 	}
+	defer s.untrack(target)
 	defer target.Close()
 	s.tunnel(conn, br, target)
 }
 
 func (s *Server) tunnel(conn net.Conn, br *bufio.Reader, target net.Conn) {
+	renew := func() {
+		deadline := time.Now().Add(idleTimeout)
+		conn.SetDeadline(deadline)
+		target.SetDeadline(deadline)
+	}
+	renew()
 	done := make(chan struct{})
 	go func() {
-		s.forward(target, io.MultiReader(br, conn), &s.up)
+		s.forward(target, io.MultiReader(br, conn), &s.up, renew)
 		close(done)
 	}()
-	s.forward(conn, target, &s.down)
+	s.forward(conn, target, &s.down, renew)
 	conn.Close()
 	target.Close()
 	<-done
@@ -160,11 +173,11 @@ func (s *Server) negotiate(conn net.Conn, br *bufio.Reader) (net.Conn, error) {
 		return nil, err
 	}
 
-	if !slices.Contains(methods, byte(0)) {
-		conn.Write([]byte{socks5, methodNone})
-		return nil, errors.New(i18n.T("socks5: 客户端不支持免认证"))
+	if !slices.Contains(methods, byte(methodNone)) {
+		conn.Write([]byte{socks5, methodNoAcceptable})
+		return nil, errors.New("socks5: the client offers no acceptable method")
 	}
-	if _, err := conn.Write([]byte{socks5, 0}); err != nil {
+	if _, err := conn.Write([]byte{socks5, methodNone}); err != nil {
 		return nil, err
 	}
 
@@ -184,20 +197,47 @@ func (s *Server) negotiate(conn net.Conn, br *bufio.Reader) (net.Conn, error) {
 		return nil, errors.New("socks5: only CONNECT is supported")
 	}
 
-	remote, err := s.dial.DialContext(context.Background(), "tcp", target)
+	remote, err := s.dialContext(target)
 	if err != nil {
 		writeReply(conn, replyHostUnreachable)
 		return nil, err
 	}
 	if err := writeReply(conn, replyOK); err != nil {
+		s.untrack(remote)
 		remote.Close()
 		return nil, err
 	}
 	return remote, nil
 }
 
-func (s *Server) forward(dst net.Conn, src io.Reader, n *atomic.Int64) {
-	io.Copy(counting{dst, n}, src)
+func (s *Server) dialContext(target string) (net.Conn, error) {
+	conn, err := s.dial.DialContext(s.ctx, "tcp", target)
+	if err != nil {
+		return nil, err
+	}
+	if !s.track(conn) {
+		conn.Close()
+		return nil, net.ErrClosed
+	}
+	return conn, nil
+}
+
+func (s *Server) forward(dst net.Conn, src io.Reader, n *atomic.Int64, renew func()) {
+	buffer := make([]byte, 32<<10)
+	for {
+		read, err := src.Read(buffer)
+		if read > 0 {
+			written, failed := dst.Write(buffer[:read])
+			n.Add(int64(written))
+			renew()
+			if failed != nil {
+				break
+			}
+		}
+		if err != nil {
+			break
+		}
+	}
 	if cw, ok := dst.(interface{ CloseWrite() error }); ok {
 		cw.CloseWrite()
 	}

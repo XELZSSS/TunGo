@@ -20,7 +20,7 @@ type Upstream struct {
 }
 
 func (u *Upstream) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
-	var d net.Dialer
+	d := net.Dialer{Timeout: handshakeTimeout}
 	conn, err := d.DialContext(ctx, "tcp", u.Addr)
 	if err != nil {
 		return nil, err

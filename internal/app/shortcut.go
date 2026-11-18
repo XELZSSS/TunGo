@@ -26,6 +26,7 @@ func (a *app) shortcutForm(c *ui.Context) {
 		return
 	}
 	t := c.Theme()
+	show, conn, proxy := a.shortcutShowKey, a.shortcutConnKey, a.shortcutProxyKey
 	ui.Modal(c, &a.editingShortcuts, func() {
 		ui.Column(c).Gap(gapLoose).Width(520).Children(func() {
 			heading(c, i18n.T("全局热键"))
@@ -34,9 +35,9 @@ func (a *app) shortcutForm(c *ui.Context) {
 				action string
 				key    *string
 			}{
-				{shortcutShow, &a.shortcutShowKey},
-				{shortcutConn, &a.shortcutConnKey},
-				{shortcutProxy, &a.shortcutProxyKey},
+				{shortcutShow, &show},
+				{shortcutConn, &conn},
+				{shortcutProxy, &proxy},
 			} {
 				ui.TextInput(c, one.key).Label(i18n.T(shortcutNames[one.action])).Placeholder("CommandOrControl+Alt+T").Grow(1)
 			}
@@ -45,6 +46,7 @@ func (a *app) shortcutForm(c *ui.Context) {
 					a.editingShortcuts = false
 				}
 				if ui.PrimaryButton(c, i18n.T("保存")).Clicked() {
+					a.shortcutShowKey, a.shortcutConnKey, a.shortcutProxyKey = show, conn, proxy
 					a.editingShortcuts = false
 					a.saveShortcuts()
 				}

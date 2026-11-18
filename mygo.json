@@ -2,6 +2,18 @@
   "name": "TunGo",
   "slug": "tungo",
   "identifier": "com.tungo.app",
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "copyright": "Copyright © 2026 XELZSSS",
+  "license": "MIT",
+  "updates": {
+    "publicKey": "BmA9113jYKrYuZQFYcK608SZ2vvZ8UnNS53xu1vV5Ys=",
+    "github": "XELZSSS/TunGo"
+  },
+  "windows": {
+    "installerInclude": "installer/nsis.nsh"
+  },
+  "resources": [
+    "LICENSE"
+  ],
   "out": "build"
 }

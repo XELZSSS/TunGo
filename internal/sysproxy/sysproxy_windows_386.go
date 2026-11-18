@@ -13,3 +13,4 @@ var errUnsupported = errors.New(i18n.T("sysproxy: 32 位 Windows 不写系统代
 func Enable(string) error    { return errUnsupported }
 func EnablePac(string) error { return errUnsupported }
 func clear() error           { return errUnsupported }
+func reset() error           { return errUnsupported }

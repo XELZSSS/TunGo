@@ -88,8 +88,14 @@ func (r Rule) NetworkList() []string {
 }
 
 func (r Rule) Bare() bool {
-	return len(r.Domain) == 0 && len(r.IP) == 0 && r.Port == "" &&
-		len(r.NetworkList()) == 0 && len(r.Protocol) == 0
+	if len(r.Domain) > 0 || len(r.IP) > 0 || len(r.NetworkList()) > 0 || len(r.Protocol) > 0 {
+		return false
+	}
+	if r.Port == "" {
+		return true
+	}
+	ports, ranges := r.Ports()
+	return len(ports) == 0 && len(ranges) == 0
 }
 
 func DefaultDNS() DNS {

@@ -16,7 +16,8 @@ const (
 	replyHostUnreachable     = 4
 	replyCommandNotSupported = 7
 
-	methodNone = 0
+	methodNone         = 0
+	methodNoAcceptable = 0xFF
 )
 
 var errBadAddr = errors.New("socks5: malformed address")

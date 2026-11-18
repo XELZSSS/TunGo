@@ -28,17 +28,11 @@ const (
 
 var Choices = []Kind{Auto, SingBox, Xray}
 
-func PickKind(kind Kind, n Node) Kind {
-	if kind != Auto {
-		return kind
-	}
-	if n.Direct() {
+func PickKind(kind Kind) Kind {
+	if kind == Auto {
 		return SingBox
 	}
-	if Carries(Xray, n) {
-		return Xray
-	}
-	return SingBox
+	return kind
 }
 
 func Carries(kind Kind, n Node) bool {
@@ -61,6 +55,16 @@ func Carries(kind Kind, n Node) bool {
 		return kind.Supports(n.Detour.Protocol)
 	}
 	return true
+}
+
+type Capabilities struct {
+	Stats            bool
+	CloseConnections bool
+}
+
+func (k Kind) Capabilities() Capabilities {
+	sing := k == SingBox
+	return Capabilities{Stats: sing, CloseConnections: sing}
 }
 
 const (
@@ -229,7 +233,7 @@ func (k *Kernel) up() bool {
 }
 
 func Start(kind Kind, n Node, socks string, tun bool) (*Kernel, error) {
-	kind = PickKind(kind, n)
+	kind = PickKind(kind)
 
 	if !Carries(kind, n) {
 		return nil, fmt.Errorf(i18n.T("%s 带不了 %q"), kind, n.Protocol)
@@ -289,8 +293,13 @@ func Start(kind Kind, n Node, socks string, tun bool) (*Kernel, error) {
 }
 
 func retryable(err error) bool {
-	msg := err.Error()
-	return strings.Contains(msg, "already exists") || strings.Contains(msg, "Element not found")
+	msg := strings.ToLower(err.Error())
+	for _, text := range []string{"already exists", "element not found", "object already exists", "cannot create", "adapter"} {
+		if strings.Contains(msg, text) {
+			return true
+		}
+	}
+	return false
 }
 
 func (k *Kernel) Kind() Kind { return k.kind }
@@ -324,48 +333,63 @@ func (k *Kernel) Stop() {
 }
 
 type ring struct {
-	mu    sync.Mutex
-	keep  int
-	lines []string
-	next  int
-	clash string
+	mu      sync.Mutex
+	keep    int
+	lines   []string
+	next    int
+	clash   string
+	pending string
 }
 
 func (r *ring) Write(p []byte) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for _, line := range strings.Split(string(p), "\n") {
-		line = strings.TrimRight(line, "\r")
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		if addr := clashAddrIn(line); addr != "" {
-			r.clash = addr
-		}
-		if len(r.lines) < r.keep {
-			r.lines = append(r.lines, line)
-			continue
-		}
-		r.lines[r.next] = line
-		r.next = (r.next + 1) % r.keep
+	chunks := strings.Split(r.pending+string(p), "\n")
+	r.pending = chunks[len(chunks)-1]
+	for _, line := range chunks[:len(chunks)-1] {
+		r.add(line)
 	}
 	return len(p), nil
+}
+
+func (r *ring) add(line string) {
+	line = strings.TrimRight(line, "\r")
+	if strings.TrimSpace(line) == "" {
+		return
+	}
+	if addr := clashAddrIn(line); addr != "" {
+		r.clash = addr
+	}
+	if len(r.lines) < r.keep {
+		r.lines = append(r.lines, line)
+		return
+	}
+	r.lines[r.next] = line
+	r.next = (r.next + 1) % r.keep
 }
 
 func (r *ring) tail() string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	ordered := make([]string, 0, len(r.lines)+1)
 	if len(r.lines) < r.keep {
-		return strings.Join(r.lines, "\n")
+		ordered = append(ordered, r.lines...)
+	} else {
+		ordered = append(ordered, r.lines[r.next:]...)
+		ordered = append(ordered, r.lines[:r.next]...)
 	}
-	ordered := make([]string, 0, r.keep)
-	ordered = append(ordered, r.lines[r.next:]...)
-	return strings.Join(append(ordered, r.lines[:r.next]...), "\n")
+	if pending := strings.TrimRight(r.pending, "\r"); strings.TrimSpace(pending) != "" {
+		ordered = append(ordered, pending)
+	}
+	return strings.Join(ordered, "\n")
 }
 
 func (r *ring) api() string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if addr := clashAddrIn(strings.TrimRight(r.pending, "\r")); addr != "" {
+		return addr
+	}
 	return r.clash
 }
 

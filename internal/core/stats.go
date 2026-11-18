@@ -21,11 +21,10 @@ type Conn struct {
 }
 
 func (k *Kernel) CloseConnections() error {
-	addr := k.clashAddr()
-	if addr == "" {
+	if !k.kind.Capabilities().CloseConnections {
 		return fmt.Errorf(i18n.T("%s 不提供会话列表"), k.kind)
 	}
-	req, err := http.NewRequest(http.MethodDelete, "http://"+addr+"/connections", nil)
+	req, err := http.NewRequest(http.MethodDelete, "http://"+k.clashAddr()+"/connections", nil)
 	if err != nil {
 		return err
 	}
@@ -43,10 +42,10 @@ func (k *Kernel) CloseConnections() error {
 }
 
 func (k *Kernel) Sessions() (up, down int64, list []Conn, err error) {
-	addr := k.clashAddr()
-	if addr == "" {
+	if !k.kind.Capabilities().Stats {
 		return 0, 0, nil, fmt.Errorf(i18n.T("%s 不提供会话列表"), k.kind)
 	}
+	addr := k.clashAddr()
 	client := &http.Client{Timeout: 2 * time.Second}
 	req, err := http.NewRequest(http.MethodGet, "http://"+addr+"/connections", nil)
 	if err != nil {

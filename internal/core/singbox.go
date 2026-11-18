@@ -173,10 +173,14 @@ func singBoxDNS(dns DNS, routing Routing) map[string]any {
 	}
 
 	if dns.Bootstrap != "" {
+		_, host, _ := splitDNS(dns.Bootstrap)
+		bootstrapIP := net.ParseIP(host) != nil
 		servers = append(servers, dnsServer("bootstrap", dns.Bootstrap, ""))
-		for _, one := range servers[:2] {
-			if server, ok := one.(map[string]any); ok {
-				server["domain_resolver"] = "bootstrap"
+		if bootstrapIP {
+			for _, one := range servers[:2] {
+				if server, ok := one.(map[string]any); ok {
+					server["domain_resolver"] = "bootstrap"
+				}
 			}
 		}
 	}

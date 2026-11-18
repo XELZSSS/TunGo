@@ -53,6 +53,7 @@ func clear() error {
 	}
 	return nil
 }
+func reset() error { return clear() }
 
 func splitAddr(addr string) (host, port string, err error) {
 	host, port, err = net.SplitHostPort(addr)

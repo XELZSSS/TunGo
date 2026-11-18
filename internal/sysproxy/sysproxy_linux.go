@@ -4,14 +4,21 @@ package sysproxy
 
 import (
 	"fmt"
+	"net"
 	"os/exec"
 	"strings"
 )
 
 func Enable(addr string) error {
-	host, port, ok := strings.Cut(addr, ":")
-	if !ok {
-		return fmt.Errorf("sysproxy: %q is not host:port", addr)
+	var host, port string
+	if h, p, err := net.SplitHostPort(addr); err == nil {
+		host, port = h, p
+	} else {
+		var ok bool
+		host, port, ok = strings.Cut(addr, ":")
+		if !ok {
+			return fmt.Errorf("sysproxy: %q is not host:port", addr)
+		}
 	}
 	if err := gsettings("org.gnome.system.proxy.socks", "host", host); err != nil {
 		return err
@@ -30,6 +37,8 @@ func EnablePac(url string) error {
 }
 
 func clear() error { return gsettings("org.gnome.system.proxy", "mode", "none") }
+
+func reset() error { return clear() }
 
 func gsettings(schema, key, value string) error {
 	out, err := exec.Command("gsettings", "set", schema, key, value).CombinedOutput()

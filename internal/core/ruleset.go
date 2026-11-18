@@ -91,7 +91,7 @@ func fetchRuleSet(url, path string) error {
 func decompile(srs, prefix string) error {
 	binary, err := Binary(SingBox)
 	if err != nil {
-		return err
+		return errors.New(i18n.T("准备 xray 规则集需要 sing-box 程序，请先安装 sing-box"))
 	}
 	dump := prefix + ".json"
 	defer os.Remove(dump)

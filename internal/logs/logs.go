@@ -1,21 +1,29 @@
 package logs
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
 
-const keep = 7
+const (
+	keep    = 7
+	maxSize = 8 << 20
+)
 
 var (
-	mu   sync.Mutex
-	dir  string
-	file *os.File
-	day  string
+	mu       sync.Mutex
+	dir      string
+	file     *os.File
+	day      string
+	size     int64
+	reported bool
 )
 
 func Setup(into string) error {
@@ -41,11 +49,22 @@ func Write(line string) {
 	now := time.Now()
 	if file == nil || day != now.Format("2006-01-02") {
 		if err := open(now); err != nil {
+			report(err)
 			return
 		}
 		clear()
 	}
-	fmt.Fprintln(file, line)
+	text := line + "\n"
+	if _, err := file.WriteString(text); err != nil {
+		report(err)
+		return
+	}
+	size += int64(len(text))
+	if size > maxSize {
+		if err := rotate(now); err != nil {
+			report(err)
+		}
+	}
 }
 
 type Writer struct{}
@@ -62,16 +81,52 @@ func Dir() string {
 }
 
 func open(now time.Time) error {
-	path := filepath.Join(dir, "tungo-"+now.Format("2006-01-02")+".log")
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	name := "tungo-" + now.Format("2006-01-02") + ".log"
+	if err := openFile(filepath.Join(dir, name), os.O_CREATE|os.O_WRONLY|os.O_APPEND); err != nil {
+		return err
+	}
+	day = now.Format("2006-01-02")
+	return nil
+}
+
+func rotate(now time.Time) error {
+	base := filepath.Join(dir, "tungo-"+now.Format("2006-01-02"))
+	for i := 1; ; i++ {
+		err := openFile(base+"."+strconv.Itoa(i)+".log", os.O_CREATE|os.O_EXCL|os.O_WRONLY|os.O_APPEND)
+		if errors.Is(err, fs.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		day = now.Format("2006-01-02")
+		return nil
+	}
+}
+
+func openFile(path string, flag int) error {
+	next, err := os.OpenFile(path, flag, 0o600)
 	if err != nil {
+		return err
+	}
+	info, err := next.Stat()
+	if err != nil {
+		next.Close()
 		return err
 	}
 	if file != nil {
 		file.Close()
 	}
-	file, day = f, now.Format("2006-01-02")
+	file, size = next, info.Size()
 	return nil
+}
+
+func report(err error) {
+	if reported {
+		return
+	}
+	reported = true
+	fmt.Fprintln(os.Stderr, "tungo: log:", err)
 }
 
 func clear() {
@@ -79,20 +134,24 @@ func clear() {
 	if err != nil {
 		return
 	}
-	cutoff := time.Now().AddDate(0, 0, -keep)
+	cutoff := time.Now().AddDate(0, 0, -keep).Format("2006-01-02")
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
-		if !strings.HasPrefix(entry.Name(), "tungo-") || !strings.HasSuffix(entry.Name(), ".log") {
+		name := entry.Name()
+		if !strings.HasPrefix(name, "tungo-") || !strings.HasSuffix(name, ".log") {
 			continue
 		}
-		info, err := entry.Info()
-		if err != nil {
+		date, _, _ := strings.Cut(strings.TrimSuffix(strings.TrimPrefix(name, "tungo-"), ".log"), ".")
+		if len(date) != 10 {
 			continue
 		}
-		if info.ModTime().Before(cutoff) {
-			os.Remove(filepath.Join(dir, entry.Name()))
+		if _, err := time.Parse("2006-01-02", date); err != nil {
+			continue
+		}
+		if date < cutoff {
+			os.Remove(filepath.Join(dir, name))
 		}
 	}
 }

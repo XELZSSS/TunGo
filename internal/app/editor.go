@@ -146,7 +146,7 @@ func (a *app) detourOptions() []string {
 func (a *app) support() bool {
 	draft := a.draft
 	draft.Detour = a.detourOf()
-	return core.Carries(core.PickKind(core.Kind(a.kind), draft), draft)
+	return core.Carries(core.PickKind(core.Kind(a.kind)), draft)
 }
 
 func (a *app) detourOf() *core.Node {
@@ -332,6 +332,7 @@ func (a *app) removeSub(name string) {
 		return
 	}
 	was := a.node()
+	dropped := was.Sub == name
 	kept := make([]core.Node, 0, len(a.nodes))
 	removed := 0
 	for _, node := range a.nodes {
@@ -350,6 +351,9 @@ func (a *app) removeSub(name string) {
 	a.save()
 	a.saveSubs()
 	a.logf(i18n.T("已删除订阅：%s（%d 个节点）"), name, removed)
+	if dropped && a.connected() {
+		a.connect()
+	}
 }
 
 func intervalName(minutes int) string {
@@ -367,16 +371,7 @@ func (a *app) reveal(path string) {
 	if info, err := os.Stat(path); err == nil && !info.IsDir() {
 		dir = filepath.Dir(path)
 	}
-	open := "xdg-open"
-	switch runtime.GOOS {
-	case "windows":
-		open = "explorer"
-	case "darwin":
-		open = "open"
-	}
-	cmd := exec.Command(open, dir)
-	core.Hide(cmd)
-	if err := cmd.Start(); err != nil {
+	if err := mygo.Shell.OpenPath(dir); err != nil {
 		a.logf(i18n.T("打不开目录：%s"), err)
 	}
 }

@@ -109,8 +109,8 @@ func (a *app) ready() {
 	a.setUpTray()
 
 	a.bindShortcuts()
-	a.installed(a.kernelKind())
 	a.probe()
+	a.checkApp(true)
 	if item := a.subs.Running(); item != nil {
 		a.refresh(item.Name)
 	}

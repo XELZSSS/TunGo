@@ -4,8 +4,10 @@ import (
 	"cmp"
 	"fmt"
 	"net"
+	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"tungo/internal/core"
@@ -28,32 +30,6 @@ func (a *app) choose(i int) {
 func (a *app) refresh(name string) { a.pullSubs([]string{name}, false) }
 
 func (a *app) refreshProxied(name string) { a.pullSubs([]string{name}, true) }
-
-func (a *app) replaceNodes(name string, nodes []core.Node) {
-	for i := range nodes {
-		nodes[i].Sub = name
-	}
-
-	was := a.node()
-	kept := make([]core.Node, 0, len(a.nodes)+len(nodes))
-	for _, node := range a.nodes {
-		if node.Sub != name {
-			kept = append(kept, node)
-		}
-	}
-	a.setNodes(append(kept, nodes...))
-	a.chosen = 0
-	for i, node := range a.nodes {
-		if sameNode(node, was) {
-			a.chosen = i
-			break
-		}
-	}
-	if a.connected() && !sameNode(a.node(), was) {
-		a.connect()
-	}
-	a.save()
-}
 
 func (a *app) saveSubs() {
 	if err := sub.Save(a.subs); err != nil {
@@ -86,6 +62,7 @@ func (a *app) probe() {
 		return
 	}
 	a.logf("%s", i18n.T("开始测速"))
+	nodes := slices.Clone(a.nodes)
 	jobs := make(chan core.Node)
 	for range probeWorkers {
 		go func() {
@@ -96,7 +73,7 @@ func (a *app) probe() {
 	}
 	go func() {
 		defer close(jobs)
-		for _, node := range a.nodes {
+		for _, node := range nodes {
 			jobs <- node
 		}
 	}()
@@ -284,9 +261,19 @@ func security(node core.Node) string {
 }
 
 func sameNode(one, other core.Node) bool {
-	return one.Name == other.Name && one.Protocol == other.Protocol && one.Role == other.Role &&
-		one.Server == other.Server && one.Port == other.Port &&
-		one.UUID == other.UUID && one.Password == other.Password
+	return reflect.DeepEqual(plainNode(one), plainNode(other))
+}
+
+func plainNode(node core.Node) core.Node {
+	node.Members = nil
+	children := slices.Clone(node.Children)
+	slices.Sort(children)
+	node.Children = children
+	if node.Detour != nil {
+		detour := plainNode(*node.Detour)
+		node.Detour = &detour
+	}
+	return node
 }
 
 func (a *app) refreshAll() {
@@ -328,48 +315,90 @@ func (a *app) pullSubs(names []string, proxied bool) {
 		}
 	}
 	go func() {
-		ok, failed := 0, 0
-		var lastErr error
-		for _, one := range jobs {
-			var nodes []core.Node
-			var err error
-			if proxied {
-				nodes, err = sub.FetchProxied(one.url, addr)
-			} else {
-				nodes, err = sub.Fetch(one.url)
-			}
-			if err != nil {
-				failed++
-				lastErr = err
-				a.update(func() { a.logf(i18n.T("订阅失败（%s）：%s"), one.name, err) })
+		results := make([]subResult, len(jobs))
+		var wg sync.WaitGroup
+		for i, one := range jobs {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				results[i].name = one.name
+				if proxied {
+					results[i].nodes, results[i].err = sub.FetchProxied(one.url, addr)
+					return
+				}
+				results[i].nodes, results[i].err = sub.Fetch(one.url)
+			}()
+		}
+		wg.Wait()
+		a.update(func() { a.applySubs(results, proxied) })
+	}()
+}
+
+type subResult struct {
+	name  string
+	nodes []core.Node
+	err   error
+}
+
+func (a *app) applySubs(results []subResult, proxied bool) {
+	was := a.node()
+	fresh := make(map[string][]core.Node, len(results))
+	ok, failed := 0, 0
+	var lastErr error
+	for _, one := range results {
+		if one.err != nil {
+			failed++
+			lastErr = one.err
+			a.logf(i18n.T("订阅失败（%s）：%s"), one.name, one.err)
+			continue
+		}
+		ok++
+		for i := range one.nodes {
+			one.nodes[i].Sub = one.name
+		}
+		fresh[one.name] = one.nodes
+		if kept := a.subs.Item(one.name); kept != nil {
+			kept.Updated = time.Now()
+		}
+		if proxied {
+			a.logf(i18n.T("订阅更新（%s，经代理）：%d 个节点"), one.name, len(one.nodes))
+		} else {
+			a.logf(i18n.T("订阅更新（%s）：%d 个节点"), one.name, len(one.nodes))
+		}
+	}
+	if ok > 0 {
+		merged := make([]core.Node, 0, len(a.nodes))
+		for _, node := range a.nodes {
+			if _, replaced := fresh[node.Sub]; replaced {
 				continue
 			}
-			ok++
-			a.update(func() {
-				a.replaceNodes(one.name, nodes)
-				if kept := a.subs.Item(one.name); kept != nil {
-					kept.Updated = time.Now()
-				}
-				if proxied {
-					a.logf(i18n.T("订阅更新（%s，经代理）：%d 个节点"), one.name, len(nodes))
-				} else {
-					a.logf(i18n.T("订阅更新（%s）：%d 个节点"), one.name, len(nodes))
-				}
-			})
+			merged = append(merged, node)
 		}
-		a.update(func() {
-			a.subBusy = false
-			switch {
-			case lastErr != nil && len(jobs) == 1:
-				a.subNote = lastErr.Error()
-			case len(jobs) == 1:
-				a.subNote = fmt.Sprintf(i18n.T("已更新：%d 个节点"), ok)
-			default:
-				a.subNote = fmt.Sprintf(i18n.T("订阅已更新：%d 个成功，%d 个失败"), ok, failed)
+		for _, one := range results {
+			if one.err == nil {
+				merged = append(merged, one.nodes...)
 			}
-			a.saveSubs()
-		})
-	}()
+		}
+		a.setNodes(merged)
+		a.chosen = 0
+		if at := a.indexOfNode(was); at >= 0 {
+			a.chosen = at
+		}
+		if a.connected() && !sameNode(a.node(), was) {
+			a.connect()
+		}
+		a.save()
+	}
+	a.subBusy = false
+	switch {
+	case lastErr != nil && len(results) == 1:
+		a.subNote = lastErr.Error()
+	case len(results) == 1:
+		a.subNote = fmt.Sprintf(i18n.T("已更新：%d 个节点"), len(results[0].nodes))
+	default:
+		a.subNote = fmt.Sprintf(i18n.T("订阅已更新：%d 个成功，%d 个失败"), ok, failed)
+	}
+	a.saveSubs()
 }
 
 const probeWorkers = 12

@@ -34,8 +34,12 @@ func (a *app) backupNow() {
 	a.logf(i18n.T("已备份到 %s"), path)
 	a.say(i18n.T("已备份"))
 }
-
 func (a *app) restoreLatest() {
+	if a.applied != "" {
+		if err := a.clearSysProxy(); err != nil {
+			a.logf(i18n.T("系统代理：%s"), err)
+		}
+	}
 	paths, err := backup.List()
 	if err != nil || len(paths) == 0 {
 		a.hint(i18n.T("还没有备份"))

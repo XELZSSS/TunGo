@@ -2,7 +2,9 @@ package app
 
 import (
 	"fmt"
+	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -145,6 +147,10 @@ func (a *app) commitRule() {
 	if rule.Out == "" {
 		rule.Out = core.Outs[0]
 	}
+	if !validPorts(rule.Port) {
+		a.fail(i18n.T("端口只能写数字或范围（如 80,443 或 1000-2000），且都在 1 到 65535 之间"))
+		return
+	}
 	if rule.Bare() {
 		a.fail(i18n.T("这条规则没有匹配条件，没有保存"))
 		a.backToRules()
@@ -156,6 +162,35 @@ func (a *app) commitRule() {
 		a.rules = append(a.rules, rule)
 	}
 	a.backToRules()
+}
+
+func portNumber(text string) (int, bool) {
+	number, err := strconv.Atoi(strings.TrimSpace(text))
+	if err != nil || number < 1 || number > 65535 {
+		return 0, false
+	}
+	return number, true
+}
+
+func validPorts(text string) bool {
+	if strings.TrimSpace(text) == "" {
+		return true
+	}
+	for _, part := range strings.Split(text, ",") {
+		low, high, ranged := strings.Cut(strings.TrimSpace(part), "-")
+		lowAt, ok := portNumber(low)
+		if !ok {
+			return false
+		}
+		if !ranged {
+			continue
+		}
+		highAt, ok := portNumber(high)
+		if !ok || lowAt > highAt {
+			return false
+		}
+	}
+	return true
 }
 
 func (a *app) dnsPresets() []string {
@@ -285,6 +320,7 @@ func (a *app) dnsForm(c *ui.Context) {
 
 func (a *app) openRouting() {
 	routing := a.routes.Routing()
+	a.routeWas = routing
 	a.rules = append([]core.Rule{}, routing.Rules...)
 	a.routeStrategy = routing.Strategy
 	if a.routeStrategy == "" {
@@ -305,6 +341,7 @@ func (a *app) openDNS() {
 		a.logf("%s", err)
 		dns = core.DefaultDNS()
 	}
+	a.dnsWas = dns
 	a.dnsRemote = dns.Remote
 	a.dnsDirect = dns.Direct
 	a.dnsBootstrap = dns.Bootstrap
@@ -324,19 +361,21 @@ func (a *app) saveRouting() {
 		Final:    core.RoutingFinals[a.routeFinalAt],
 		Rules:    a.rules,
 	}
+	changed := !reflect.DeepEqual(a.routeWas, routing)
 	a.routes.Put(a.routes.Current, routing)
+	a.routeWas = routing
 	a.logf(i18n.T("路由规则已保存（%s）：%d 条规则，最终%s"),
 		routeLabel(a.routes.Current), len(routing.Rules), finalName(routing.FinalTag()))
-	a.saveRoutes()
+	a.saveRoutes(changed)
 }
 
-func (a *app) saveRoutes() {
+func (a *app) saveRoutes(reconnect bool) {
 	if err := core.SaveRoutingSet(a.routes); err != nil {
 		a.fail(err.Error())
 		a.logf(i18n.T("保存路由失败：%s"), err)
 		return
 	}
-	if a.connected() {
+	if reconnect && a.connected() {
 		a.connect()
 	}
 }
@@ -347,7 +386,7 @@ func (a *app) selectRouting(name string) {
 	}
 	a.routes.Current = name
 	a.logf(i18n.T("路由配置：%s"), routeLabel(name))
-	a.saveRoutes()
+	a.saveRoutes(true)
 }
 
 func (a *app) addRouting() {
@@ -359,7 +398,7 @@ func (a *app) addRouting() {
 	a.routeName = ""
 	a.editingRouteName = false
 	a.logf(i18n.T("新建路由配置：%s"), name)
-	a.saveRoutes()
+	a.saveRoutes(false)
 }
 
 func (a *app) removeRouting() {
@@ -369,7 +408,7 @@ func (a *app) removeRouting() {
 	name := a.routes.Current
 	a.routes.Remove(name)
 	a.logf(i18n.T("已删除路由配置：%s"), i18n.T(name))
-	a.saveRoutes()
+	a.saveRoutes(true)
 }
 
 func (a *app) routeNameForm(c *ui.Context) {
@@ -395,6 +434,14 @@ func (a *app) routeNameForm(c *ui.Context) {
 }
 
 func (a *app) saveDNS() {
+	if !validHostLines(a.dnsHosts) {
+		a.fail(i18n.T("Hosts 每行要写「名称 地址」"))
+		return
+	}
+	if !validSplitLines(a.dnsSplit) {
+		a.fail(i18n.T("按域分流每行要写「域名 服务器」"))
+		return
+	}
 	dns := core.DNS{
 		Remote:    a.dnsRemote,
 		Direct:    a.dnsDirect,
@@ -404,16 +451,44 @@ func (a *app) saveDNS() {
 		Hosts:     parseHosts(a.dnsHosts),
 		Split:     parseSplit(a.dnsSplit),
 	}
+	changed := !reflect.DeepEqual(a.dnsWas, dns)
 	if err := core.SaveDNS(dns); err != nil {
 		a.fail(err.Error())
 		a.logf(i18n.T("保存 DNS 失败：%s"), err)
 		return
 	}
+	a.dnsWas = dns
 	a.logf(i18n.T("DNS 已保存：远程 %s，直连 %s，%s，屏蔽 AAAA %s，%d 条 Hosts"),
 		dns.Remote, dns.Direct, dns.Strategy, onOff(dns.BlockAAAA), len(dns.Hosts))
-	if a.connected() {
+	if changed && a.connected() {
 		a.connect()
 	}
+}
+
+func validHostLines(text string) bool {
+	for _, line := range strings.Split(text, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 0 || strings.HasPrefix(fields[0], "#") {
+			continue
+		}
+		if len(fields) != 2 {
+			return false
+		}
+	}
+	return true
+}
+
+func validSplitLines(text string) bool {
+	for _, line := range strings.Split(text, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 0 || strings.HasPrefix(fields[0], "#") {
+			continue
+		}
+		if len(fields) < 2 {
+			return false
+		}
+	}
+	return true
 }
 
 func onOff(on bool) string {

@@ -7,8 +7,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
-	"strings"
 	"time"
 
 	"tungo/internal/appdir"
@@ -19,6 +19,7 @@ const maxEntry = 8 << 20
 
 const keep = 10
 
+var backupName = regexp.MustCompile(`^tungo-\d{8}-\d{6}\.\d{3}\.zip$`)
 var files = []string{
 	"nodes.json", "subscription.json", "settings.json",
 	"routing.json", "dns.json",
@@ -40,16 +41,21 @@ func Make() (string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
-	path := filepath.Join(dir, "tungo-"+time.Now().Format("20060102-150405")+".zip")
-	out, err := os.Create(path)
+	path := filepath.Join(dir, "tungo-"+time.Now().Format("20060102-150405.000")+".zip")
+	fresh := path + ".tmp"
+	out, err := os.Create(fresh)
 	if err != nil {
 		return "", err
 	}
-	defer out.Close()
+	fail := func(err error) (string, error) {
+		out.Close()
+		os.Remove(fresh)
+		return "", err
+	}
 	z := zip.NewWriter(out)
 	data, err := appdir.Dir()
 	if err != nil {
-		return "", err
+		return fail(err)
 	}
 	for _, name := range files {
 		source, err := os.Open(filepath.Join(data, name))
@@ -59,15 +65,23 @@ func Make() (string, error) {
 		entry, err := z.Create(name)
 		if err != nil {
 			source.Close()
-			return "", err
+			return fail(err)
 		}
 		if _, err := io.Copy(entry, source); err != nil {
 			source.Close()
-			return "", err
+			return fail(err)
 		}
 		source.Close()
 	}
 	if err := z.Close(); err != nil {
+		return fail(err)
+	}
+	if err := out.Close(); err != nil {
+		os.Remove(fresh)
+		return "", err
+	}
+	if err := os.Rename(fresh, path); err != nil {
+		os.Remove(fresh)
 		return "", err
 	}
 	if err := prune(); err != nil {
@@ -103,7 +117,7 @@ func List() ([]string, error) {
 	}
 	var out []string
 	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".zip") {
+		if !entry.IsDir() && backupName.MatchString(entry.Name()) {
 			out = append(out, filepath.Join(dir, entry.Name()))
 		}
 	}
@@ -121,51 +135,63 @@ func Restore(path string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	var restored []string
+	var entries []*zip.File
 	for _, entry := range z.File {
 		name := filepath.Base(entry.Name)
 		if !known(name) {
 			continue
 		}
+		if entry.UncompressedSize64 > maxEntry {
+			return nil, fmt.Errorf(i18n.T("%s 太大，不是备份里的文件"), name)
+		}
+		entries = append(entries, entry)
+	}
+	if len(entries) == 0 {
+		return nil, errors.New(i18n.T("备份里没有认得的东西"))
+	}
+	restored := make([]string, 0, len(entries))
+	fresh := func(name string) string { return filepath.Join(data, name+".restore") }
+	drop := func() {
+		for _, name := range restored {
+			os.Remove(fresh(name))
+		}
+	}
+	for _, entry := range entries {
+		name := filepath.Base(entry.Name)
+		restored = append(restored, name)
 		source, err := entry.Open()
 		if err != nil {
-			return restored, err
+			drop()
+			return nil, err
 		}
-		target := filepath.Join(data, name)
-		fresh := target + ".restore"
-		out, err := os.Create(fresh)
+		out, err := os.Create(fresh(name))
 		if err != nil {
 			source.Close()
-			return restored, err
+			drop()
+			return nil, err
 		}
 		written, err := io.Copy(out, io.LimitReader(source, maxEntry+1))
 		source.Close()
+		if err == nil && written > maxEntry {
+			err = fmt.Errorf(i18n.T("%s 太大，不是备份里的文件"), name)
+		}
+		if err == nil {
+			err = out.Chmod(0o600)
+		}
+		if cerr := out.Close(); err == nil {
+			err = cerr
+		}
 		if err != nil {
-			out.Close()
-			os.Remove(fresh)
-			return restored, err
+			drop()
+			return nil, err
 		}
-		if written > maxEntry {
-			out.Close()
-			os.Remove(fresh)
-			return restored, fmt.Errorf(i18n.T("%s 太大，不是备份里的文件"), name)
-		}
-		if err := out.Close(); err != nil {
-			os.Remove(fresh)
-			return restored, err
-		}
-		if err := os.Chmod(fresh, 0o600); err != nil {
-			os.Remove(fresh)
-			return restored, err
-		}
-		if err := os.Rename(fresh, target); err != nil {
-			os.Remove(fresh)
-			return restored, err
-		}
-		restored = append(restored, name)
 	}
-	if len(restored) == 0 {
-		return nil, errors.New(i18n.T("备份里没有认得的东西"))
+	for at, name := range restored {
+		if err := os.Rename(fresh(name), filepath.Join(data, name)); err != nil {
+			restored = restored[at:]
+			drop()
+			return nil, err
+		}
 	}
 	return restored, nil
 }

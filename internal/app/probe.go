@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"time"
 
@@ -24,12 +23,16 @@ var pingURLs = []string{
 
 const speedURL = "https://speed.cloudflare.com/__down?bytes=10000000"
 
-func (a *app) measure(node core.Node, speed bool) (int, float64, error) {
-	socks, err := freeAddr()
+var measureSlots = make(chan struct{}, 2)
+
+func measure(kind core.Kind, node core.Node, speed bool) (int, float64, error) {
+	measureSlots <- struct{}{}
+	defer func() { <-measureSlots }()
+	socks, err := kernelInbound()
 	if err != nil {
 		return -1, 0, err
 	}
-	kernel, err := core.Start(core.PickKind(core.Kind(a.kind), node), node, socks, false)
+	kernel, err := core.Start(kind, node, socks, false)
 	if err != nil {
 		return -1, 0, err
 	}
@@ -105,9 +108,11 @@ func (a *app) realPing(i int) {
 		return
 	}
 	node := a.nodes[i]
+	kind := core.PickKind(core.Kind(a.kind))
+	resolved := a.resolved(node)
 	a.logf(i18n.T("真连接延迟：%s"), node.Name)
 	go func() {
-		ms, _, err := a.measure(a.resolved(node), false)
+		ms, _, err := measure(kind, resolved, false)
 		a.update(func() {
 			at := a.indexOfNode(node)
 			if at < 0 {
@@ -129,9 +134,11 @@ func (a *app) speedTest(i int) {
 		return
 	}
 	node := a.nodes[i]
+	kind := core.PickKind(core.Kind(a.kind))
+	resolved := a.resolved(node)
 	a.logf(i18n.T("测速：%s"), node.Name)
 	go func() {
-		ms, mb, err := a.measure(a.resolved(node), true)
+		ms, mb, err := measure(kind, resolved, true)
 		a.update(func() {
 			at := a.indexOfNode(node)
 			if at < 0 {
@@ -148,16 +155,6 @@ func (a *app) speedTest(i int) {
 		})
 	}()
 }
-
-func freeAddr() (string, error) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return "", err
-	}
-	defer l.Close()
-	return l.Addr().String(), nil
-}
-
 func (a *app) speedLabel(i int) string {
 	if i < 0 || i >= len(a.speed) || a.speed[i] <= 0 {
 		return "—"

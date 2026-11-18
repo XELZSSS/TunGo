@@ -1,6 +1,7 @@
 package app
 
 import (
+	"net"
 	"strconv"
 	"strings"
 
@@ -39,7 +40,7 @@ func (a *app) applySysProxy() {
 			return
 		}
 		var url string
-		if url, err = a.startPac(); err == nil {
+		if url, err = a.startPac(a.localAddr()); err == nil {
 			err = sysproxy.EnablePac(url)
 		}
 		if err != nil {
@@ -154,9 +155,23 @@ func (a *app) portForm(c *ui.Context) {
 	})
 }
 
+func (a *app) portLabel() string {
+	if a.local != nil {
+		if _, port, err := net.SplitHostPort(a.local.Addr()); err == nil {
+			return port
+		}
+	}
+	return listenLabel(a.port)
+}
+
 func (a *app) savePort() {
 	port := 0
-	if value, err := strconv.Atoi(strings.TrimSpace(a.portText)); err == nil && value > 0 && value < 65536 {
+	if text := strings.TrimSpace(a.portText); text != "" {
+		value, err := strconv.Atoi(text)
+		if err != nil || value < 1 || value > 65535 {
+			a.fail(i18n.T("端口要是一个 1 到 65535 的数字，留空表示每次启动随机"))
+			return
+		}
 		port = value
 	}
 	a.editingPort = false

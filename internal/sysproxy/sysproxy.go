@@ -12,3 +12,4 @@ const (
 var Modes = []Mode{ModeClear, ModeSet, ModeUnchanged, ModePac}
 
 func Clear() error { return clear() }
+func Reset() error { return reset() }

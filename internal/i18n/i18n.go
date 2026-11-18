@@ -3,12 +3,16 @@ package i18n
 import (
 	_ "embed"
 	"encoding/json"
+	"sync"
 )
 
 //go:embed lang/en.json
 var english []byte
 
-var lang = "zh"
+var (
+	mu   sync.RWMutex
+	lang = "zh"
+)
 
 var en = load()
 
@@ -27,17 +31,25 @@ func load() map[string]string {
 
 func verbs(text string) string {
 	var out []byte
-	for i := 0; i+1 < len(text); i++ {
+	for i := 0; i < len(text); i++ {
 		if text[i] != '%' {
 			continue
 		}
 		i++
+		if i >= len(text) {
+			break
+		}
+		if text[i] == '%' {
+			continue
+		}
 		out = append(out, text[i])
 	}
 	return string(out)
 }
 
 func Set(l string) {
+	mu.Lock()
+	defer mu.Unlock()
 	if l == "en" {
 		lang = "en"
 		return
@@ -45,9 +57,15 @@ func Set(l string) {
 	lang = "zh"
 }
 
-func Lang() string { return lang }
+func Lang() string {
+	mu.RLock()
+	defer mu.RUnlock()
+	return lang
+}
 
 func T(zh string) string {
+	mu.RLock()
+	defer mu.RUnlock()
 	if lang == "en" {
 		if text, ok := en[zh]; ok {
 			return text

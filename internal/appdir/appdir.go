@@ -95,9 +95,33 @@ func file(name string) (string, error) {
 }
 
 func WriteFile(path string, data []byte, perm fs.FileMode) error {
-	fresh := path + ".tmp"
-	if err := os.WriteFile(fresh, data, perm); err != nil {
+	f, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	if err != nil {
 		return err
 	}
-	return os.Rename(fresh, path)
+	fresh := f.Name()
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		os.Remove(fresh)
+		return err
+	}
+	if err := f.Chmod(perm); err != nil {
+		f.Close()
+		os.Remove(fresh)
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		os.Remove(fresh)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(fresh)
+		return err
+	}
+	if err := os.Rename(fresh, path); err != nil {
+		os.Remove(fresh)
+		return err
+	}
+	return nil
 }

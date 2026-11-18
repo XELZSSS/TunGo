@@ -133,8 +133,7 @@ func (a *app) table(c *ui.Context, t *ui.Theme) {
 	})
 	if a.row != a.rowAt && a.row >= 0 && a.row < len(a.shown) {
 		a.rowAt = a.row
-		a.chosen = a.shown[a.row]
-		a.know(a.kernelKind())
+		a.choose(a.shown[a.row])
 	}
 }
 
@@ -202,7 +201,7 @@ func (a *app) log(c *ui.Context, t *ui.Theme) {
 	ui.Column(c).Fill().Children(func() {
 		ui.Row(c).Gap(gapBase).AlignItems(ui.Center).PaddingX(padX).PaddingY(padYDense).Children(func() {
 			if ui.Button(c, i18n.T("复制")).Clicked() {
-				a.copyLogs()
+				a.copyLogs(c)
 			}
 			if ui.Button(c, i18n.T("清空")).Clicked() {
 				a.clearLogs()
@@ -307,13 +306,12 @@ func (a *app) sessionsNote() string {
 	return i18n.T("没有正在转发的连接")
 }
 
-func (a *app) copyLogs() {
+func (a *app) copyLogs(c *ui.Context) {
 	if len(a.logs) == 0 {
 		return
 	}
-	a.writeNext = strings.Join(a.logs, "\n")
+	c.WriteClipboard(strings.Join(a.logs, "\n"))
 	a.say(i18n.T("日志已复制"))
-	a.update(func() {})
 }
 
 func (a *app) clearLogs() {

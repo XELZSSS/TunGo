@@ -52,7 +52,7 @@ func (a *app) menuBar(c *ui.Context, t *ui.Theme) {
 			Disabled(a.connected() || a.updating)
 		if a.installNeeded() {
 			if ui.Button(c, i18n.T("检查内核")).Clicked() {
-				a.install()
+				a.diagnose()
 			}
 		} else if a.latest != "" {
 			if ui.Button(c, fmt.Sprintf(i18n.T("更新 %s"), strings.TrimPrefix(a.latest, "v"))).Clicked() {
@@ -213,6 +213,10 @@ func (a *app) routingMenu(c *ui.Context, m *ui.Menu) {
 	}
 	m.Separator()
 	m.Submenu(i18n.T("区域预置"), func(p *ui.Menu) { a.regionMenu(c, p) })
+	if m.Item(i18n.T("忽略缺失的规则集并连接")).Chosen() {
+		a.ignoreRules = true
+		a.connect()
+	}
 }
 
 func (a *app) settingsMenu(c *ui.Context, m *ui.Menu) {
@@ -251,7 +255,7 @@ func (a *app) settingsMenu(c *ui.Context, m *ui.Menu) {
 			a.openShortcuts()
 		}
 	})
-	if m.Item(fmt.Sprintf(i18n.T("本地端口（%s）"), listenLabel(a.port))).Chosen() {
+	if m.Item(fmt.Sprintf(i18n.T("本地端口（%s）"), a.portLabel())).Chosen() {
 		a.openPort()
 	}
 	m.Separator()
@@ -296,11 +300,27 @@ func (a *app) kernelMenu(_ *ui.Context, m *ui.Menu) {
 }
 
 func (a *app) helpMenu(m *ui.Menu) {
+	if m.Item(i18n.T("检查应用更新")).Disabled(a.releases.polling || a.releases.installing).Chosen() {
+		a.checkApp(false)
+	}
+	if update := a.releases.pending; update != nil {
+		if m.Item(fmt.Sprintf(i18n.T("更新应用到 %s"), update.Version)).Disabled(a.releases.installing).Chosen() {
+			a.installApp()
+		}
+	}
+	if a.releases.installing {
+		label := i18n.T("正在更新应用")
+		if a.releases.progress != "" {
+			label += " " + a.releases.progress
+		}
+		m.Item(label).Disabled(true)
+	}
+	m.Separator()
 	if m.Item(i18n.T("检查内核更新")).Chosen() {
 		a.check()
 	}
 	if m.Item(i18n.T("关于 TunGo")).Chosen() {
-		a.hint(fmt.Sprintf(i18n.T("TunGo · 数据在 %s"), mustDir()))
+		a.about()
 	}
 }
 
@@ -394,12 +414,17 @@ func (a *app) save() {
 
 func (a *app) prune() {
 	real := make(map[string]bool, len(a.nodes))
+	known := make(map[string]bool, len(a.nodes))
 	for _, node := range a.nodes {
+		known[node.Name] = true
 		if !node.Group() {
 			real[node.Name] = true
 		}
 	}
 	for i := range a.nodes {
+		if detour := a.nodes[i].Detour; detour != nil && !known[detour.Name] {
+			a.nodes[i].Detour = nil
+		}
 		if !a.nodes[i].Group() {
 			continue
 		}

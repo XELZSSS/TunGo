@@ -9,6 +9,19 @@ import (
 	"tungo/internal/i18n"
 )
 
+const (
+	rulesNoConnect = iota
+	rulesConnect
+	rulesReconnect
+)
+
+func rulesIntent(connected bool) int {
+	if connected {
+		return rulesReconnect
+	}
+	return rulesNoConnect
+}
+
 func (a *app) regionMenu(_ *ui.Context, m *ui.Menu) {
 	for _, region := range core.Regions {
 		name := region
@@ -32,11 +45,10 @@ func (a *app) applyRegion(region string) {
 		a.logf("%s", err)
 		return
 	}
-	go a.ensureRules(routing, a.connected())
+	go a.ensureRules(routing, a.kernelKind(), rulesIntent(a.connected()))
 }
 
-func (a *app) ensureRules(routing core.Routing, resume bool) {
-	kind := a.kernelKind()
+func (a *app) ensureRules(routing core.Routing, kind core.Kind, want int) {
 	failed := false
 	for _, entry := range core.MissingRuleSets(routing, kind) {
 		if err := core.EnsureRuleSet(entry, kind); err != nil {
@@ -49,12 +61,15 @@ func (a *app) ensureRules(routing core.Routing, resume bool) {
 		}
 		a.update(func() { a.logf(i18n.T("规则集已就绪：%s"), entry) })
 	}
-	if !resume {
+	if want == rulesNoConnect {
 		return
 	}
 	a.update(func() {
 		if failed {
-			a.fail(i18n.T("规则集没补齐，先不连了"))
+			a.fail(i18n.T("规则集没补齐，先不连了（可在「路由规则」里选「忽略缺失的规则集并连接」）"))
+			return
+		}
+		if want == rulesReconnect && !a.connected() {
 			return
 		}
 		a.notice = ""
