@@ -406,5 +406,9 @@
   "已更新到 %s，正在重启…": "Updated to %s, restarting…",
   "TunGo %s · 数据在 %s": "TunGo %s · data in %s",
   "打不开项目主页：%s": "Cannot open the project page: %s",
-  "这个版本没带更新地址，请从项目主页下载新版": "This build carries no update feed; download the new version from the project page"
+  "这个版本没带更新地址，请从项目主页下载新版": "This build carries no update feed; download the new version from the project page",
+  "内核的内部端口被占用，请稍后重试或重启 TunGo": "Kernel internal port is in use; retry later or restart TunGo",
+  "%s：没有拿到发布包的 SHA256，已停止安装": "%s: no release SHA256 available, installation aborted",
+  "%s：文件超过大小限制": "%s: file exceeds the size limit",
+  "订阅内容超过 8MB，已停止导入": "Subscription exceeds 8 MB, import aborted"
 }

@@ -186,12 +186,18 @@ func Restore(path string) ([]string, error) {
 			return nil, err
 		}
 	}
-	for at, name := range restored {
+	renamed := 0
+	for _, name := range restored {
 		if err := os.Rename(fresh(name), filepath.Join(data, name)); err != nil {
-			restored = restored[at:]
-			drop()
+			for _, done := range restored[:renamed] {
+				os.Rename(filepath.Join(data, done), fresh(done))
+			}
+			for _, pending := range restored[renamed:] {
+				os.Remove(fresh(pending))
+			}
 			return nil, err
 		}
+		renamed++
 	}
 	return restored, nil
 }

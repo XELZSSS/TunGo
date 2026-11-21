@@ -132,6 +132,7 @@ func (a *app) quit() {
 	a.tries++
 	a.busy = false
 	a.quitting = true
+	a.cancelMeas()
 	if err := a.clearSysProxy(); err != nil {
 		log.Print(err)
 	}

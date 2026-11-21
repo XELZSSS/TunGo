@@ -119,7 +119,10 @@ func Binary(kind Kind) (string, error) {
 	}
 	for _, bin := range bins() {
 		place := filepath.Join(bin, name)
-		if _, err := os.Stat(place); err == nil {
+		if info, err := os.Stat(place); err == nil {
+			if runtime.GOOS != "windows" && info.Mode()&0o111 == 0 {
+				continue
+			}
 			return place, nil
 		}
 	}

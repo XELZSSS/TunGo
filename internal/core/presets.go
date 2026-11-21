@@ -20,6 +20,7 @@ func PresetRouting(name string) Routing {
 
 func baseRules() []Rule {
 	return []Rule{
+		{Remark: "拦截广告", Out: "block", Domain: []string{"geosite:adblock", "geosite:category-ads-all"}},
 		{Remark: "阻断 UDP 443", Out: "block", Port: "443", Network: "udp"},
 		{Remark: "绕过局域网地址", Out: "direct", IP: []string{"geoip:private"}},
 		{Remark: "绕过局域网域名", Out: "direct", Domain: []string{"geosite:private"}},
@@ -39,6 +40,7 @@ func mainlandRules() []Rule {
 
 func blackRules() []Rule {
 	return []Rule{
+		{Remark: "拦截广告", Out: "block", Domain: []string{"geosite:adblock", "geosite:category-ads-all"}},
 		{Remark: "绕过 bittorrent", Out: "direct", Protocol: []string{"bittorrent"}},
 		{Remark: "代理 api.ip.sb", Out: "proxy", Domain: []string{"domain:api.ip.sb"}},
 		{Remark: "阻断 UDP 443", Out: "block", Port: "443", Network: "udp"},
@@ -107,7 +109,6 @@ func RegionRouting(name string) Routing {
 
 func regional(own []Rule) Routing {
 	rules := append(baseRules(), own...)
-	rules = append(rules, Rule{Remark: "拦截广告", Out: "block", Domain: []string{"geosite:category-ads-all"}})
 	return Routing{Strategy: "IPIfNonMatch", Rules: rules}
 }
 

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -25,7 +26,10 @@ const speedURL = "https://speed.cloudflare.com/__down?bytes=10000000"
 
 var measureSlots = make(chan struct{}, 2)
 
-func measure(kind core.Kind, node core.Node, speed bool) (int, float64, error) {
+func measure(ctx context.Context, kind core.Kind, node core.Node, speed bool) (int, float64, error) {
+	if err := ctx.Err(); err != nil {
+		return -1, 0, err
+	}
 	measureSlots <- struct{}{}
 	defer func() { <-measureSlots }()
 	socks, err := kernelInbound()
@@ -46,7 +50,10 @@ func measure(kind core.Kind, node core.Node, speed bool) (int, float64, error) {
 	}
 	ms := -1
 	for _, url := range pingURLs {
-		if ms = roundTrip(client, url); ms > 0 {
+		if ctx.Err() != nil {
+			return -1, 0, ctx.Err()
+		}
+		if ms = roundTrip(ctx, client, url); ms > 0 {
 			break
 		}
 	}
@@ -60,7 +67,11 @@ func measure(kind core.Kind, node core.Node, speed bool) (int, float64, error) {
 	client.Timeout = time.Minute
 
 	start := time.Now()
-	resp, err := client.Get(speedURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, speedURL, nil)
+	if err != nil {
+		return ms, 0, err
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return ms, 0, err
 	}
@@ -76,15 +87,15 @@ func measure(kind core.Kind, node core.Node, speed bool) (int, float64, error) {
 	return ms, float64(read) / seconds / (1 << 20), nil
 }
 
-func roundTrip(client *http.Client, url string) int {
-	if _, err := getBody(client, url); err != nil {
+func roundTrip(ctx context.Context, client *http.Client, url string) int {
+	if _, err := getBody(ctx, client, url); err != nil {
 		return -1
 	}
 	best := -1
 	for i := 0; i < 2; i++ {
 		time.Sleep(100 * time.Millisecond)
 		start := time.Now()
-		if _, err := getBody(client, url); err != nil {
+		if _, err := getBody(ctx, client, url); err != nil {
 			return -1
 		}
 		if elapsed := int(time.Since(start).Milliseconds()); best < 0 || elapsed < best {
@@ -94,8 +105,12 @@ func roundTrip(client *http.Client, url string) int {
 	return best
 }
 
-func getBody(client *http.Client, url string) (int64, error) {
-	resp, err := client.Get(url)
+func getBody(ctx context.Context, client *http.Client, url string) (int64, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return 0, err
 	}
@@ -111,8 +126,9 @@ func (a *app) realPing(i int) {
 	kind := core.PickKind(core.Kind(a.kind))
 	resolved := a.resolved(node)
 	a.logf(i18n.T("真连接延迟：%s"), node.Name)
+	ctx := a.measureCtx
 	go func() {
-		ms, _, err := measure(kind, resolved, false)
+		ms, _, err := measure(ctx, kind, resolved, false)
 		a.update(func() {
 			at := a.indexOfNode(node)
 			if at < 0 {
@@ -137,8 +153,9 @@ func (a *app) speedTest(i int) {
 	kind := core.PickKind(core.Kind(a.kind))
 	resolved := a.resolved(node)
 	a.logf(i18n.T("测速：%s"), node.Name)
+	ctx := a.measureCtx
 	go func() {
-		ms, mb, err := measure(kind, resolved, true)
+		ms, mb, err := measure(ctx, kind, resolved, true)
 		a.update(func() {
 			at := a.indexOfNode(node)
 			if at < 0 {

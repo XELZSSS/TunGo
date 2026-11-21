@@ -1,8 +1,11 @@
 package core
 
 import (
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"tungo/internal/appdir"
 )
@@ -212,13 +215,27 @@ func DefaultRoutingSet() RoutingSet {
 func LoadRoutingSet() (RoutingSet, error) {
 	var set RoutingSet
 	err := appdir.ReadJSON("routing.json", &set)
-	if len(set.Items) == 0 {
+	if err != nil || len(set.Items) == 0 {
+		backupBrokenRouting()
 		set = DefaultRoutingSet()
 	}
 	if set.Item(set.Current) == nil {
 		set.Current = set.Items[0].Name
 	}
 	return set, err
+}
+
+func backupBrokenRouting() {
+	dir, err := appdir.Dir()
+	if err != nil {
+		return
+	}
+	from := filepath.Join(dir, "routing.json")
+	if _, err := os.Stat(from); err != nil {
+		return
+	}
+	to := from + "." + time.Now().Format("20060102-150405") + ".bak"
+	os.Rename(from, to)
 }
 
 func SaveRoutingSet(set RoutingSet) error { return appdir.WriteJSON("routing.json", set) }

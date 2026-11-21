@@ -3,6 +3,7 @@ package i18n
 import (
 	_ "embed"
 	"encoding/json"
+	"regexp"
 	"sync"
 )
 
@@ -29,20 +30,16 @@ func load() map[string]string {
 	return dict
 }
 
+var formatVerb = regexp.MustCompile(`%(?:\[\d+\])?[-+#0 ]*(?:\d+|\*)?(?:\.(?:\d+|\*))?(?:\[\d+\])?[a-zA-Z]`)
+
 func verbs(text string) string {
-	var out []byte
-	for i := 0; i < len(text); i++ {
-		if text[i] != '%' {
+	matches := formatVerb.FindAllString(text, -1)
+	out := make([]byte, 0, len(matches))
+	for _, match := range matches {
+		if match == "%%" {
 			continue
 		}
-		i++
-		if i >= len(text) {
-			break
-		}
-		if text[i] == '%' {
-			continue
-		}
-		out = append(out, text[i])
+		out = append(out, match[len(match)-1])
 	}
 	return string(out)
 }

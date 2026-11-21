@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strings"
@@ -101,6 +102,10 @@ func (a *app) launch(wait <-chan struct{}, prev running, kind core.Kind, node co
 				a.busy = false
 				a.fail(err.Error())
 				a.logf(i18n.T("内核起不来：%s"), err)
+				if strings.Contains(strings.ToLower(err.Error()), "address already in use") ||
+					strings.Contains(err.Error(), "端口") {
+					a.logf("%s", i18n.T("内核的内部端口被占用，请稍后重试或重启 TunGo"))
+				}
 			})
 			return
 		}
@@ -192,8 +197,14 @@ func (a *app) detach() running {
 	return held
 }
 
+func (a *app) restartMeasures() {
+	a.cancelMeas()
+	a.measureCtx, a.cancelMeas = context.WithCancel(context.Background())
+}
+
 func (a *app) disconnect() {
 	was := a.connected()
+	a.restartMeasures()
 	a.tries++
 	a.busy = false
 	if err := a.clearSysProxy(); err != nil {

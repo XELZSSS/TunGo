@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/egoist/mygo"
@@ -12,13 +13,15 @@ import (
 )
 
 type shell struct {
-	win       *mygo.Window
-	tray      *mygo.Tray
-	quitting  bool
-	maximized bool
-	themeName string
-	writeNext string
-	queued    []func()
+	win        *mygo.Window
+	tray       *mygo.Tray
+	quitting   bool
+	maximized  bool
+	themeName  string
+	writeNext  string
+	queued     []func()
+	measureCtx context.Context
+	cancelMeas context.CancelFunc
 }
 
 type lists struct {

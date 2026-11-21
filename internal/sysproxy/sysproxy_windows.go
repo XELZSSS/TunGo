@@ -55,9 +55,9 @@ type settings struct {
 }
 
 var (
-	saveOnce sync.Once
-	saved    settings
-	savedOK  bool
+	saveMu  sync.Mutex
+	saved   settings
+	savedOK bool
 )
 
 func internetSetOption(what uint32, value unsafe.Pointer, size uintptr) error {
@@ -143,7 +143,9 @@ func write(into settings) error {
 }
 
 func save() {
-	saveOnce.Do(func() { saved, savedOK = query() })
+	saveMu.Lock()
+	defer saveMu.Unlock()
+	saved, savedOK = query()
 }
 
 func Enable(addr string) error {
@@ -157,11 +159,13 @@ func EnablePac(url string) error {
 }
 
 func clear() error {
-	save()
-	if !savedOK {
+	saveMu.Lock()
+	state, ok := saved, savedOK
+	saveMu.Unlock()
+	if !ok {
 		return nil
 	}
-	return write(saved)
+	return write(state)
 }
 func reset() error {
 	return write(settings{flags: flagDirect})

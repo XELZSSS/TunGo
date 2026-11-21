@@ -2,7 +2,10 @@ package app
 
 import "tungo/internal/appdir"
 
+const settingsVersion = 1
+
 type settings struct {
+	Version   int               `json:"version"`
 	Skipped   map[string]string `json:"skipped"`
 	Kind      string            `json:"kind,omitempty"`
 	Theme     string            `json:"theme,omitempty"`
@@ -16,9 +19,12 @@ type settings struct {
 }
 
 func loadSettings() (settings, error) {
-	out := settings{Skipped: map[string]string{}}
+	out := settings{Version: settingsVersion, Skipped: map[string]string{}}
 	if err := appdir.ReadJSON("settings.json", &out); err != nil {
 		return out, err
+	}
+	if out.Version > settingsVersion {
+		out = settings{Version: settingsVersion, Skipped: map[string]string{}}
 	}
 	if out.Skipped == nil {
 		out.Skipped = map[string]string{}
@@ -26,4 +32,7 @@ func loadSettings() (settings, error) {
 	return out, nil
 }
 
-func (s settings) save() error { return appdir.WriteJSON("settings.json", s) }
+func (s settings) save() error {
+	s.Version = settingsVersion
+	return appdir.WriteJSON("settings.json", s)
+}

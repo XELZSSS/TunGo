@@ -3,6 +3,7 @@ package app
 import (
 	"cmp"
 	"fmt"
+	"math/rand/v2"
 	"net"
 	"reflect"
 	"slices"
@@ -41,6 +42,7 @@ func (a *app) saveSubs() {
 func (a *app) autoUpdate() {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
+	time.Sleep(time.Duration(rand.IntN(10)) * time.Second)
 	for range ticker.C {
 		a.update(func() {
 			if a.subBusy {

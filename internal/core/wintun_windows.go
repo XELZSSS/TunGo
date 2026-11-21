@@ -20,7 +20,7 @@ func EnsureWintun(kernel string) error {
 		return nil
 	}
 	var archive bytes.Buffer
-	if err := fetch(wintunURL, &archive, nil); err != nil {
+	if err := fetch(wintunURL, &archive, nil, 32<<20); err != nil {
 		return fmt.Errorf(i18n.T("下载 wintun：%w"), err)
 	}
 	reader, err := zip.NewReader(bytes.NewReader(archive.Bytes()), int64(archive.Len()))

@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -156,7 +155,7 @@ func Install(kind Kind, tag string, progress func(part, whole int64)) (string, e
 		return "", err
 	}
 	if want == "" {
-		log.Print("no digest for ", archive)
+		return "", fmt.Errorf(i18n.T("%s：没有拿到发布包的 SHA256，已停止安装"), archive)
 	}
 
 	temp, err := os.CreateTemp("", "tungo-"+string(kind)+"-*")
@@ -166,7 +165,7 @@ func Install(kind Kind, tag string, progress func(part, whole int64)) (string, e
 	defer os.Remove(temp.Name())
 	defer temp.Close()
 
-	if err := fetch(url, temp, progress); err != nil {
+	if err := fetch(url, temp, progress, 200<<20); err != nil {
 		return "", err
 	}
 	if ok, err := looks(archive, temp); err != nil {
@@ -248,7 +247,7 @@ func platform(kind Kind) (string, error) {
 func assetDigest(kind Kind, tag, name string) (string, error) {
 	url := githubAPI + releases[kind].repo + "/releases/tags/" + tag
 	var body bytes.Buffer
-	if err := fetch(url, &body, nil); err != nil {
+	if err := fetch(url, &body, nil, 8<<20); err != nil {
 		return "", err
 	}
 	var got struct {
@@ -300,7 +299,7 @@ func looks(archive string, from *os.File) (bool, error) {
 	return n >= 2 && head[0] == 0x1f && head[1] == 0x8b, nil
 }
 
-func fetch(url string, to io.Writer, progress func(part, whole int64)) error {
+func fetch(url string, to io.Writer, progress func(part, whole int64), max int64) error {
 	client := &http.Client{Timeout: 10 * time.Minute, Transport: transport()}
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -317,10 +316,15 @@ func fetch(url string, to io.Writer, progress func(part, whole int64)) error {
 	}
 	var body io.Reader = resp.Body
 	if progress != nil {
-		body = &progressReader{from: resp.Body, whole: resp.ContentLength, report: progress}
+		body = &progressReader{from: body, whole: resp.ContentLength, report: progress}
 	}
-	if _, err := io.Copy(to, body); err != nil {
+	limited := &io.LimitedReader{R: body, N: max + 1}
+	n, err := io.Copy(to, limited)
+	if err != nil {
 		return fmt.Errorf("%s：%w", url, err)
+	}
+	if n > max {
+		return fmt.Errorf(i18n.T("%s：文件超过大小限制"), url)
 	}
 	return nil
 }

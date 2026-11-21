@@ -12,7 +12,17 @@ import (
 	"tungo/internal/i18n"
 )
 
-const rulesetURL = "https://raw.githubusercontent.com/2dust/sing-box-rules/rule-set-"
+const (
+	rulesetURL = "https://raw.githubusercontent.com/2dust/sing-box-rules/rule-set-"
+	adblockSRS = "https://raw.githubusercontent.com/217heidai/adblockfilters/dist/adblocksingbox.srs"
+)
+
+func ruleSetURL(kind, tag string) string {
+	if kind == "geosite" && tag == "adblock" {
+		return adblockSRS
+	}
+	return rulesetURL + kind + "/" + kind + "-" + tag + ".srs"
+}
 
 func have(entry string, kind Kind) bool {
 	k, tag := geoKindTag(entry)
@@ -41,7 +51,7 @@ func EnsureRuleSet(entry string, kind Kind) error {
 	}
 	base := filepath.Join(dir, k+"-"+tag)
 	if ruleSetPath(k+"-"+tag+".srs") == "" {
-		if err := fetchRuleSet(rulesetURL+k+"/"+k+"-"+tag+".srs", base+".srs"); err != nil {
+		if err := fetchRuleSet(ruleSetURL(k, tag), base+".srs"); err != nil {
 			return fmt.Errorf("%s: %w", entry, err)
 		}
 	}
@@ -63,7 +73,7 @@ func fetchRuleSet(url, path string) error {
 		return err
 	}
 	tmp := out.Name()
-	err = fetch(url, out, nil)
+	err = fetch(url, out, nil, 16<<20)
 	out.Close()
 	if err != nil {
 		os.Remove(tmp)

@@ -2,7 +2,6 @@ package core
 
 import (
 	"net"
-	"strings"
 	"time"
 )
 
@@ -41,7 +40,7 @@ func tunState(name string) (present, up bool) {
 		return false, false
 	}
 	for _, one := range interfaces {
-		if !strings.HasPrefix(one.Name, name) {
+		if one.Name != name {
 			continue
 		}
 		present = true

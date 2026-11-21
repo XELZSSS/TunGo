@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
@@ -45,6 +46,7 @@ func newApp() *app {
 		servers: servers{kind: string(core.Auto)},
 		link:    link{proxy: string(sysproxy.ModeSet), proxyOn: string(sysproxy.ModeSet)},
 	}
+	a.measureCtx, a.cancelMeas = context.WithCancel(context.Background())
 	a.list.Selected = &a.row
 	a.rowAt = -1
 	a.list.RowHeight = tableRowHeight
