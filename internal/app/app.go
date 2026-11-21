@@ -44,6 +44,7 @@ func newApp() *app {
 		shell:   shell{themeName: "light"},
 		lists:   lists{panePct: 65},
 		servers: servers{kind: string(core.Auto)},
+		kernels: kernels{skipped: map[string]string{}},
 		link:    link{proxy: string(sysproxy.ModeSet), proxyOn: string(sysproxy.ModeSet)},
 	}
 	a.launchKill = map[int]func(){}
@@ -67,10 +68,7 @@ func newApp() *app {
 }
 
 func (a *app) loadAll() error {
-	remembered, err := loadSettings()
-	if err != nil {
-		return err
-	}
+	remembered, settingsErr := loadSettings()
 	i18n.Set(remembered.Lang)
 	nodes, at, err := core.LoadNodes()
 	if err != nil {
@@ -101,13 +99,14 @@ func (a *app) loadAll() error {
 	a.ruleBase = remembered.RuleBase
 	core.SetSourceBase(a.ruleBase)
 	if a.applied != "" {
-		if err := sysproxy.Reset(); err == nil {
-			a.applied = ""
-			a.saveSettings()
-			a.logf("%s", i18n.T("上次的系统代理没清干净，已还原"))
+		if !sysproxy.Restore() {
+			sysproxy.Reset()
 		}
+		a.applied = ""
+		a.saveSettings()
+		a.logf("%s", i18n.T("上次的系统代理没清干净，已还原"))
 	}
-	return nil
+	return settingsErr
 }
 
 func (a *app) node() core.Node {

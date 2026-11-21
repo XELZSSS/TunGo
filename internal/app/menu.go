@@ -431,6 +431,7 @@ func (a *app) save() {
 		a.fail(err.Error())
 		a.logf(i18n.T("保存节点失败：%s"), err)
 	}
+	a.refreshTray()
 }
 
 func (a *app) prune() {

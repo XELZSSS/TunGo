@@ -18,7 +18,7 @@ func Enable(addr string) error {
 	if err != nil {
 		return err
 	}
-	if err := run("networksetup", "-setautoproxystate", service, "off"); err != nil {
+	if err := off(service, "-setwebproxystate", "-setsecurewebproxystate", "-setautoproxystate"); err != nil {
 		return err
 	}
 	if err := run("networksetup", "-setsocksfirewallproxy", service, host, port); err != nil {
@@ -32,7 +32,7 @@ func EnablePac(url string) error {
 	if err != nil {
 		return err
 	}
-	if err := run("networksetup", "-setsocksfirewallproxystate", service, "off"); err != nil {
+	if err := off(service, "-setsocksfirewallproxystate", "-setwebproxystate", "-setsecurewebproxystate"); err != nil {
 		return err
 	}
 	if err := run("networksetup", "-setautoproxyurl", service, url); err != nil {
@@ -46,14 +46,21 @@ func clear() error {
 	if err != nil {
 		return err
 	}
-	for _, arg := range []string{"-setsocksfirewallproxystate", "-setautoproxystate"} {
-		if err := run("networksetup", arg, service, "off"); err != nil {
+	return off(service, "-setsocksfirewallproxystate", "-setwebproxystate", "-setsecurewebproxystate", "-setautoproxystate")
+}
+
+func off(service string, states ...string) error {
+	for _, name := range states {
+		if err := run("networksetup", name, service, "off"); err != nil {
 			return err
 		}
 	}
 	return nil
 }
+
 func reset() error { return clear() }
+
+func restore() bool { return false }
 
 func splitAddr(addr string) (host, port string, err error) {
 	host, port, err = net.SplitHostPort(addr)

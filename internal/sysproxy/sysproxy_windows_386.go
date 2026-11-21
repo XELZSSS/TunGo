@@ -14,3 +14,5 @@ func Enable(string) error    { return errUnsupported }
 func EnablePac(string) error { return errUnsupported }
 func clear() error           { return errUnsupported }
 func reset() error           { return errUnsupported }
+
+func restore() bool { return false }

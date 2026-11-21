@@ -191,6 +191,9 @@ func (a *app) refreshTray() {
 		slices.IndexFunc(a.routes.Items, func(item core.RoutingItem) bool { return item.Name == a.routes.Current }),
 		func(i int) string { return routeLabel(a.routes.Items[i].Name) },
 		func(i int) {
+			if i < 0 || i >= len(a.routes.Items) {
+				return
+			}
 			a.selectRouting(a.routes.Items[i].Name)
 			a.sync()
 		})

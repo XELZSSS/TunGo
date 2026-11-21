@@ -21,9 +21,7 @@ type settings struct {
 
 func loadSettings() (settings, error) {
 	out := settings{Version: settingsVersion, Skipped: map[string]string{}}
-	if err := appdir.ReadJSON("settings.json", &out); err != nil {
-		return out, err
-	}
+	err := appdir.ReadJSON("settings.json", &out)
 	if out.Version > settingsVersion {
 		shortcuts, skipped := out.Shortcuts, out.Skipped
 		out = settings{Version: settingsVersion, Skipped: skipped, Shortcuts: shortcuts}
@@ -31,7 +29,7 @@ func loadSettings() (settings, error) {
 	if out.Skipped == nil {
 		out.Skipped = map[string]string{}
 	}
-	return out, nil
+	return out, err
 }
 
 func (s settings) save() error {

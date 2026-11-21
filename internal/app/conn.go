@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"strings"
-	"sync"
 	"time"
 
 	"tungo/internal/core"
@@ -83,8 +82,7 @@ func (a *app) launch(wait <-chan struct{}, prev running, kind core.Kind, node co
 
 	var kernel *core.Kernel
 	var local *proxy.Server
-	killOnce := sync.Once{}
-	kill := func() { killOnce.Do(func() { a.finishLaunch(kernel, local) }) }
+	kill := func() { a.finishLaunch(kernel, local) }
 	a.registerLaunch(ticket, kill)
 	defer a.dropLaunch(ticket)
 
@@ -139,6 +137,8 @@ func (a *app) launch(wait <-chan struct{}, prev running, kind core.Kind, node co
 		a.kernel = kernel
 		a.local = local
 		a.stop = make(chan struct{})
+		a.upRaw, a.downRaw, a.upBase, a.downBase = 0, 0, 0, 0
+		a.sampleUp, a.sampleDown, a.hist = 0, 0, nil
 		a.notice = ""
 		if note != "" {
 			a.logf("%s", note)
@@ -154,6 +154,7 @@ func (a *app) launch(wait <-chan struct{}, prev running, kind core.Kind, node co
 				a.applySysProxy()
 			}
 		}
+		a.refreshTray()
 		go a.watch(a.stop, local, kernel)
 	})
 }
@@ -255,6 +256,7 @@ func (a *app) disconnect() {
 	if was {
 		a.event("%s", i18n.T("已断开"))
 	}
+	a.refreshTray()
 }
 
 func (a *app) watch(stop <-chan struct{}, local *proxy.Server, kernel *core.Kernel) {

@@ -369,6 +369,7 @@ func (a *app) saveRoutes(reconnect bool) {
 		a.logf(i18n.T("保存路由失败：%s"), err)
 		return
 	}
+	a.refreshTray()
 	if reconnect && a.connected() {
 		a.connect()
 	}

@@ -462,6 +462,7 @@ func shadowsocks(link string) (core.Node, error) {
 	if !ok {
 		return core.Node{}, errors.New(i18n.T("ss: 缺少密码"))
 	}
+	address = strings.TrimSuffix(address, "/")
 	host, portNumber, err := net.SplitHostPort(address)
 	if err != nil {
 		return core.Node{}, err
@@ -595,7 +596,8 @@ var clashProtocols = map[string]string{
 	"http":  "http",
 	"vmess": "vmess", "vless": "vless", "trojan": "trojan",
 	"hysteria2": "hysteria2", "hy2": "hysteria2",
-	"tuic": "tuic",
+	"tuic":   "tuic",
+	"anytls": "anytls",
 }
 
 var singBoxSkips = map[string]bool{
@@ -720,7 +722,7 @@ func clashNode(one map[string]any) (core.Node, error) {
 		node.Security = field(one, "cipher")
 	case "vless":
 		node.UUID = field(one, "uuid")
-	case "trojan":
+	case "trojan", "anytls":
 		node.Password = field(one, "password")
 	case "shadowsocks":
 		node.Method = field(one, "cipher")
@@ -800,7 +802,7 @@ func singBoxNode(one map[string]any) (core.Node, error) {
 	case "vless":
 		node.UUID = field(one, "uuid")
 		node.Flow = field(one, "flow")
-	case "trojan":
+	case "trojan", "anytls":
 		node.Password = field(one, "password")
 	case "shadowsocks":
 		node.Method = field(one, "method")

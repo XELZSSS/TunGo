@@ -40,6 +40,8 @@ func clear() error { return gsettings("org.gnome.system.proxy", "mode", "none") 
 
 func reset() error { return clear() }
 
+func restore() bool { return false }
+
 func gsettings(schema, key, value string) error {
 	out, err := exec.Command("gsettings", "set", schema, key, value).CombinedOutput()
 	if err != nil {

@@ -333,6 +333,16 @@ func (a *app) commitSub() {
 	item := a.subDraft
 	item.Name, item.URL, item.Interval = name, url, interval
 	item.UA = strings.TrimSpace(item.UA)
+	if old := a.subName(a.subAt); old != "" && old != name {
+		a.subs.Remove(old)
+		for i := range a.nodes {
+			if a.nodes[i].Sub == old {
+				a.nodes[i].Sub = name
+			}
+		}
+		a.nodesChanged()
+		a.save()
+	}
 	a.subs.Put(item)
 	a.subs.Current = name
 	a.editingSubItem = false
@@ -436,4 +446,11 @@ func (a *app) rebootAsAdmin() {
 	}
 	a.logf("%s", i18n.T("已请求以管理员身份重启"))
 	a.requestQuit()
+}
+
+func (a *app) subName(at int) string {
+	if at < 0 || at >= len(a.subs.Items) {
+		return ""
+	}
+	return a.subs.Items[at].Name
 }

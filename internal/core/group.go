@@ -26,7 +26,7 @@ func singBoxGroup(n Node) ([]any, error) {
 		tags = append(tags, tag)
 	}
 	auto := map[string]any{
-		"type":                        urlTestType(n.StrategyOr()),
+		"type":                        "urltest",
 		"tag":                         autoTag,
 		"outbounds":                   tags,
 		"interrupt_exist_connections": false,
@@ -175,11 +175,4 @@ func xrayBalancerType(strategy string) string {
 
 func memberTag(i int, n Node) string {
 	return fmt.Sprintf("%s-%d-%s", proxyTag, i+1, n.Name)
-}
-
-func urlTestType(strategy string) string {
-	if strategy == "fallback" {
-		return "fallback"
-	}
-	return "urltest"
 }

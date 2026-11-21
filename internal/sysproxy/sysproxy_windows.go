@@ -4,10 +4,14 @@ package sysproxy
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
 	"sync"
 	"syscall"
 	"unsafe"
+
+	"tungo/internal/appdir"
 )
 
 const (
@@ -52,6 +56,23 @@ type settings struct {
 	proxyServer   string
 	proxyBypass   string
 	autoconfigURL string
+}
+
+type snapshot struct {
+	Flags      uint64 `json:"flags"`
+	Server     string `json:"server"`
+	Bypass     string `json:"bypass"`
+	Autoconfig string `json:"autoconfig"`
+}
+
+const snapshotName = "sysproxy.json"
+
+func dropSnapshot() {
+	dir, err := appdir.Dir()
+	if err != nil {
+		return
+	}
+	os.Remove(filepath.Join(dir, snapshotName))
 }
 
 var (
@@ -146,6 +167,15 @@ func save() {
 	saveMu.Lock()
 	defer saveMu.Unlock()
 	saved, savedOK = query()
+	if !savedOK {
+		return
+	}
+	appdir.WriteJSON(snapshotName, snapshot{
+		Flags:      saved.flags,
+		Server:     saved.proxyServer,
+		Bypass:     saved.proxyBypass,
+		Autoconfig: saved.autoconfigURL,
+	})
 }
 
 func Enable(addr string) error {
@@ -165,8 +195,33 @@ func clear() error {
 	if !ok {
 		return nil
 	}
-	return write(state)
+	if err := write(state); err != nil {
+		return err
+	}
+	saveMu.Lock()
+	savedOK = false
+	saveMu.Unlock()
+	dropSnapshot()
+	return nil
 }
+
 func reset() error {
 	return write(settings{flags: flagDirect})
+}
+
+func restore() bool {
+	var one snapshot
+	if err := appdir.ReadJSON(snapshotName, &one); err != nil {
+		return false
+	}
+	if one.Flags == 0 && one.Server == "" && one.Autoconfig == "" {
+		dropSnapshot()
+		return false
+	}
+	err := write(settings{flags: one.Flags, proxyServer: one.Server, proxyBypass: one.Bypass, autoconfigURL: one.Autoconfig})
+	dropSnapshot()
+	saveMu.Lock()
+	saved, savedOK = settings{}, false
+	saveMu.Unlock()
+	return err == nil
 }

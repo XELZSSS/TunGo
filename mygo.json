@@ -9,7 +9,8 @@
   "updates": {
     "publicKey": "BmA9113jYKrYuZQFYcK608SZ2vvZ8UnNS53xu1vV5Ys=",
     "github": "XELZSSS/TunGo",
-    "privateKey": "C:/Users/Administrator/AppData/Roaming/mygo/update-keys/mygo-update.key"
+    "privateKey": "C:/Users/Administrator/AppData/Roaming/mygo/update-keys/mygo-update.key",
+    "deltas": 1
   },
   "resources": [
     "LICENSE"
