@@ -84,7 +84,9 @@ type releases struct {
 	pending    *mygo.Update
 	polling    bool
 	installing bool
-	progress   string
+	dialog     bool
+	part       int64
+	whole      int64
 }
 
 type hotkeys struct {

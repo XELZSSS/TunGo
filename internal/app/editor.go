@@ -25,6 +25,7 @@ func (a *app) overlays(c *ui.Context) {
 	a.shortcutForm(c)
 	a.portForm(c)
 	a.policyForms(c)
+	a.updateDialog(c)
 }
 
 func (a *app) nodeForm(c *ui.Context) {
