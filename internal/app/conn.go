@@ -16,7 +16,6 @@ import (
 
 func (a *app) connect() {
 	ignore := a.ignoreRules
-	a.ignoreRules = false
 	if a.busy {
 		return
 	}
@@ -51,11 +50,7 @@ func (a *app) connect() {
 			return
 		}
 
-		routing, err := core.LoadRouting()
-		if err != nil {
-			a.fail(err.Error())
-			return
-		}
+		routing := core.LoadRouting()
 		if missing := core.MissingRuleSets(routing, kind); len(missing) > 0 {
 			if !ignore {
 				a.hint(fmt.Sprintf(i18n.T("正在下载规则集：%s"), strings.Join(missing, ", ")))
@@ -70,8 +65,8 @@ func (a *app) connect() {
 		}
 	}
 
-	wait, prev := a.drain, a.detach()
-	a.drain = nil
+	wait, prev := a.drainState(nil), a.detach()
+	a.ignoreRules = false
 	a.tries++
 	ticket := a.tries
 	a.busy = true
@@ -94,23 +89,13 @@ func (a *app) launch(wait <-chan struct{}, prev running, kind core.Kind, node co
 	defer a.dropLaunch(ticket)
 
 	if !node.Direct() {
-		socks, err := kernelInbound()
-		if err != nil {
-			a.settle(ticket, func() {
-				a.busy = false
-				a.fail(err.Error())
-				a.logf("%s", err)
-			})
-			return
-		}
-		started, err := core.Start(kind, node, socks, tun)
+		started, err := startKernel(kind, node, tun)
 		if err != nil {
 			a.settle(ticket, func() {
 				a.busy = false
 				a.fail(err.Error())
 				a.logf(i18n.T("内核起不来：%s"), err)
-				if strings.Contains(strings.ToLower(err.Error()), "address already in use") ||
-					strings.Contains(err.Error(), "端口") {
+				if busyPort(err) {
 					a.logf("%s", i18n.T("内核的内部端口被占用，请稍后重试或重启 TunGo"))
 				}
 			})
@@ -203,9 +188,8 @@ func (a *app) detachLaunch(held running) {
 	if held.empty() {
 		return
 	}
-	wait := a.drain
 	done := make(chan struct{})
-	a.drain = done
+	wait := a.drainState(done)
 	go func() {
 		if wait != nil {
 			<-wait
@@ -333,6 +317,46 @@ func (a *app) watch(stop <-chan struct{}, local *proxy.Server, kernel *core.Kern
 			})
 		}
 	}
+}
+
+func (a *app) drainState(next chan struct{}) chan struct{} {
+	a.drainMu.Lock()
+	defer a.drainMu.Unlock()
+	held := a.drain
+	a.drain = next
+	return held
+}
+
+func (a *app) currentDrain() <-chan struct{} {
+	a.drainMu.Lock()
+	defer a.drainMu.Unlock()
+	return a.drain
+}
+
+func startKernel(kind core.Kind, node core.Node, tun bool) (*core.Kernel, error) {
+	kernel, err := startOnce(kind, node, tun)
+	if err != nil && !tun && busyPort(err) {
+		kernel, err = startOnce(kind, node, tun)
+	}
+	return kernel, err
+}
+
+func startOnce(kind core.Kind, node core.Node, tun bool) (*core.Kernel, error) {
+	socks, err := kernelInbound()
+	if err != nil {
+		return nil, err
+	}
+	return core.Start(kind, node, socks, tun)
+}
+
+func busyPort(err error) bool {
+	msg := strings.ToLower(err.Error())
+	for _, text := range []string{"address already in use", "only one usage of each socket address"} {
+		if strings.Contains(msg, text) {
+			return true
+		}
+	}
+	return false
 }
 
 func kernelInbound() (string, error) {

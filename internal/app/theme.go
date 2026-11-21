@@ -134,7 +134,7 @@ func listOf(t *ui.Theme) *ui.Theme {
 	return &one
 }
 
-var Themes = []string{"light", "dark", "system"}
+var themes = []string{"light", "dark", "system"}
 
 func themeFor(name string, dark bool) *ui.Theme {
 	if name == "dark" || (name == "system" && dark) {

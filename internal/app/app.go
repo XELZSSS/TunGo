@@ -76,10 +76,7 @@ func (a *app) loadAll() error {
 	if err != nil {
 		return err
 	}
-	routes, err := core.LoadRoutingSet()
-	if err != nil {
-		return err
-	}
+	routes := core.LoadRoutingSet()
 	a.nodesAt = at
 	a.setNodes(nodes)
 	a.chosen = 0
@@ -197,6 +194,7 @@ func (a *app) setTun(on bool) {
 
 func (a *app) setLang(lang string) {
 	i18n.Set(lang)
+	a.groups = nil
 	a.saveSettings()
 	a.sync()
 }
@@ -233,6 +231,7 @@ func (a *app) appendNodes(nodes ...core.Node) {
 		a.speed = append(a.speed, 0)
 	}
 	a.nodes = append(a.nodes, nodes...)
+	a.nodesChanged()
 }
 
 func (a *app) dropNode(i int) {
@@ -244,12 +243,14 @@ func (a *app) dropNode(i int) {
 	} else if a.chosen > i {
 		a.chosen--
 	}
+	a.nodesChanged()
 }
 
 func (a *app) swapNodes(i, to int) {
 	a.nodes[i], a.nodes[to] = a.nodes[to], a.nodes[i]
 	a.ms[i], a.ms[to] = a.ms[to], a.ms[i]
 	a.speed[i], a.speed[to] = a.speed[to], a.speed[i]
+	a.nodesChanged()
 }
 
 func (a *app) setNodes(nodes []core.Node) {
@@ -259,4 +260,10 @@ func (a *app) setNodes(nodes []core.Node) {
 	for i := range a.ms {
 		a.ms[i] = -1
 	}
+	a.nodesChanged()
+}
+
+func (a *app) nodesChanged() {
+	a.nodesVersion++
+	a.rowsDirty = true
 }

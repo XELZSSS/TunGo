@@ -26,6 +26,7 @@ type shell struct {
 	quitOnce   sync.Once
 	launchMu   sync.Mutex
 	launchKill map[int]func()
+	drainMu    sync.Mutex
 }
 
 type lists struct {
@@ -38,6 +39,14 @@ type lists struct {
 	shown    []int
 	row      int
 	rowAt    int
+
+	nodesVersion int
+	rowsDirty    bool
+	rowsGroup    string
+	rowsColumn   string
+	rowsDesc     bool
+	groups       []string
+	groupsAt     int
 }
 
 type servers struct {

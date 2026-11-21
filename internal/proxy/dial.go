@@ -7,6 +7,8 @@ import (
 	"io"
 	"net"
 	"time"
+
+	"tungo/internal/i18n"
 )
 
 type Dialer interface {
@@ -46,7 +48,7 @@ func handshake(conn net.Conn, addr string) error {
 		return err
 	}
 	if method[0] != socks5 || method[1] != 0 {
-		return errors.New("the node asks for a method other than none")
+		return errors.New(i18n.T("socks5: 节点要求认证，客户端只支持免认证"))
 	}
 	if _, err := conn.Write([]byte{socks5, 1, 0}); err != nil {
 		return err
@@ -59,10 +61,10 @@ func handshake(conn net.Conn, addr string) error {
 		return err
 	}
 	if head[0] != socks5 {
-		return fmt.Errorf("version %d", head[0])
+		return fmt.Errorf(i18n.T("socks5: 版本不是 5：%d"), head[0])
 	}
 	if head[1] != replyOK {
-		return fmt.Errorf("the node replied %d", head[1])
+		return fmt.Errorf(i18n.T("socks5: 节点回复错误代码 %d"), head[1])
 	}
 
 	_, err := readAddr(conn)

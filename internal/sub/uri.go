@@ -103,7 +103,15 @@ func shadowsocksURI(n core.Node) (string, error) {
 	}
 	credentials := base64.RawURLEncoding.EncodeToString([]byte(n.Method + ":" + n.Password))
 	address := net.JoinHostPort(n.Server, strconv.Itoa(n.Port))
-	return "ss://" + credentials + "@" + address + "#" + url.QueryEscape(n.Name), nil
+	link := "ss://" + credentials + "@" + address
+	if n.Plugin != "" {
+		plugin := n.Plugin
+		if n.PluginOpts != "" {
+			plugin += ";" + n.PluginOpts
+		}
+		link += "/?plugin=" + url.QueryEscape(plugin)
+	}
+	return link + "#" + url.QueryEscape(n.Name), nil
 }
 
 func hysteria2URI(n core.Node) (string, error) {

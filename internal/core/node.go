@@ -26,13 +26,15 @@ type Node struct {
 	Server string `json:"server,omitempty"`
 	Port   int    `json:"port,omitempty"`
 
-	Method   string `json:"method,omitempty"`
-	Password string `json:"password,omitempty"`
-	Username string `json:"username,omitempty"`
-	UUID     string `json:"uuid,omitempty"`
-	Flow     string `json:"flow,omitempty"`
-	AlterID  int    `json:"alterId,omitempty"`
-	Security string `json:"security,omitempty"`
+	Method     string `json:"method,omitempty"`
+	Plugin     string `json:"plugin,omitempty"`
+	PluginOpts string `json:"pluginOpts,omitempty"`
+	Password   string `json:"password,omitempty"`
+	Username   string `json:"username,omitempty"`
+	UUID       string `json:"uuid,omitempty"`
+	Flow       string `json:"flow,omitempty"`
+	AlterID    int    `json:"alterId,omitempty"`
+	Security   string `json:"security,omitempty"`
 
 	Network string `json:"network,omitempty"`
 	Path    string `json:"path,omitempty"`

@@ -9,9 +9,10 @@ import (
 	"tungo/internal/i18n"
 )
 
-func strategyNames() []string {
-	names := make([]string, len(core.GroupStrategies))
-	for i, id := range core.GroupStrategies {
+func (a *app) strategyNames() []string {
+	ids := a.kernelKind().Strategies()
+	names := make([]string, len(ids))
+	for i, id := range ids {
 		names[i] = core.StrategyName(id)
 	}
 	return names
@@ -39,9 +40,15 @@ func (a *app) addGroup() {
 
 func (a *app) editGroup(i int) {
 	node := a.nodes[i]
+	names := a.strategyNames()
 	a.groupWas = node
 	a.groupName = node.Name
-	a.groupStrategy = strategyName(node.StrategyOr())
+	a.groupStrategy = names[0]
+	for _, name := range names {
+		if name == strategyName(node.StrategyOr()) {
+			a.groupStrategy = name
+		}
+	}
 	a.groupPick = map[string]bool{}
 	for _, name := range node.Children {
 		a.groupPick[name] = true
@@ -71,12 +78,12 @@ func (a *app) groupForm(c *ui.Context) {
 			heading(c, i18n.T("策略组"))
 			ui.Row(c).Gap(gapBase).Children(func() {
 				ui.TextInput(c, &a.groupName).Label(i18n.T("备注")).Placeholder(i18n.T("备注")).Grow(1)
-				ui.Select(c, &a.groupStrategy, strategyNames()).Label(i18n.T("策略组类型")).Width(180)
+				ui.Select(c, &a.groupStrategy, a.strategyNames()).Label(i18n.T("策略组类型")).Width(180)
 			})
 			muted(c, t, i18n.T("内核在这组成员里按类型挑一个：最低延迟挑答得最快的，故障转移只用它，随机与轮询轮流用，最低负载挑负载最轻的。"))
 			ui.Divider(c)
 			if a.kernelKind() == core.SingBox {
-				ui.Text(c, i18n.T("sing-box 内核只会按延迟挑（故障转移也只用最低延迟那个），随机、轮询、最低负载要换成 xray 内核才有效。")).
+				ui.Text(c, i18n.T("sing-box 内核只能按延迟挑（最低延迟或故障转移），随机、轮询、最低负载要用 xray 内核。")).
 					FontSize(fontS).TextColor(t.Danger)
 			}
 			muted(c, t, i18n.T("成员（按顺序）"))
@@ -137,6 +144,7 @@ func (a *app) commitGroup() {
 		a.appendNodes(group)
 		a.chosen = len(a.nodes) - 1
 	}
+	a.nodesChanged()
 	a.groupNote = ""
 	a.editingGroup = false
 	a.save()

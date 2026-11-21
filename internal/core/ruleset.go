@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"tungo/internal/appdir"
 	"tungo/internal/i18n"
 )
 
@@ -169,7 +170,7 @@ func decompile(srs, prefix string) error {
 }
 
 func writeLines(path string, lines []string) error {
-	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644); err != nil {
+	if err := appdir.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644); err != nil {
 		return fmt.Errorf(i18n.T("写 %s: %w"), filepath.Base(path), err)
 	}
 	return nil

@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -78,12 +79,17 @@ func xrayOutbound(n Node) (map[string]any, error) {
 		}
 		out["settings"] = map[string]any{"servers": []any{server}}
 	case "shadowsocks":
-		out["settings"] = map[string]any{"servers": []any{map[string]any{
+		server := map[string]any{
 			"address":  n.Server,
 			"port":     n.Port,
 			"method":   n.Method,
 			"password": n.Password,
-		}}}
+		}
+		if n.Plugin != "" {
+			server["plugin"] = n.Plugin
+			server["pluginOpts"] = n.PluginOpts
+		}
+		out["settings"] = map[string]any{"servers": []any{server}}
 	case "vmess":
 		out["settings"] = map[string]any{"vnext": []any{map[string]any{
 			"address": n.Server,
@@ -111,6 +117,9 @@ func xrayOutbound(n Node) (map[string]any, error) {
 			"password": n.Password,
 		}}}
 	}
+	if SecurityOf(n) != "" && strings.Contains(n.ECH, "://") {
+		return nil, errors.New(i18n.T("ECH 要填配置内容，不能填链接"))
+	}
 	if carriesTLS(n.Protocol) || carriesTransport(n.Protocol) || ((n.Protocol == "socks" || n.Protocol == "http") && SecurityOf(n) != "") {
 		if stream := xrayStream(n); len(stream) > 0 {
 			out["streamSettings"] = stream
@@ -130,7 +139,7 @@ func xrayStream(n Node) map[string]any {
 		if n.Insecure {
 			tls["allowInsecure"] = true
 		}
-		if n.ECH != "" && !strings.Contains(n.ECH, "://") {
+		if n.ECH != "" {
 			tls["echConfigList"] = n.ECH
 		}
 		if n.Pinned != "" {
@@ -174,8 +183,12 @@ func xrayStream(n Node) map[string]any {
 		stream["network"] = "xhttp"
 		stream["xhttpSettings"] = map[string]any{"host": hostName(n), "path": wsPath(n)}
 	case "httpupgrade":
+		upgrade := map[string]any{"path": wsPath(n)}
+		if n.Host != "" {
+			upgrade["host"] = n.Host
+		}
 		stream["network"] = "httpupgrade"
-		stream["httpupgradeSettings"] = map[string]any{"host": n.Host, "path": wsPath(n)}
+		stream["httpupgradeSettings"] = upgrade
 	}
 	return stream
 }

@@ -228,12 +228,18 @@ func (s *Server) dialContext(target string) (net.Conn, error) {
 	return conn, nil
 }
 
-func (s *Server) forward(dst net.Conn, src io.Reader, n *atomic.Int64, renew func()) {
+var buffers = sync.Pool{New: func() any {
 	buffer := make([]byte, 32<<10)
+	return &buffer
+}}
+
+func (s *Server) forward(dst net.Conn, src io.Reader, n *atomic.Int64, renew func()) {
+	buffer := buffers.Get().(*[]byte)
+	defer buffers.Put(buffer)
 	for {
-		read, err := src.Read(buffer)
+		read, err := src.Read(*buffer)
 		if read > 0 {
-			written, failed := dst.Write(buffer[:read])
+			written, failed := dst.Write((*buffer)[:read])
 			n.Add(int64(written))
 			renew()
 			if failed != nil {

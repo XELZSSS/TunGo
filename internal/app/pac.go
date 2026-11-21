@@ -1,13 +1,17 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
+	"time"
 
 	"tungo/internal/i18n"
 )
+
+const stopTimeout = 2 * time.Second
 
 const pacScript = `function FindProxyForURL(url, host) {
   if (isPlainHostName(host) ||
@@ -44,7 +48,9 @@ func (a *app) startPac(addr string) (string, error) {
 
 func (a *app) stopPac() {
 	if a.pac != nil {
-		a.pac.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), stopTimeout)
+		a.pac.Shutdown(ctx)
+		cancel()
 		a.pac = nil
 	}
 }

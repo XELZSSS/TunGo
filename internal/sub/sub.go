@@ -129,13 +129,13 @@ func proxy(link string) (core.Node, error) {
 	if u.Path != "" && u.Path != "/" {
 		return core.Node{}, errors.New(i18n.T("不是节点"))
 	}
-	port, err := strconv.Atoi(u.Port())
-	if err != nil {
-		return core.Node{}, errors.New(i18n.T("缺少端口"))
-	}
 	protocol := "socks"
 	if strings.HasPrefix(u.Scheme, "http") {
 		protocol = "http"
+	}
+	port, err := portText(protocol, u.Port())
+	if err != nil {
+		return core.Node{}, err
 	}
 	node := core.Node{
 		Name:     name(u.Fragment, u.Hostname(), port),
@@ -182,8 +182,8 @@ func vmess(link string) (core.Node, error) {
 	if err != nil {
 		return core.Node{}, err
 	}
-	if port <= 0 || port > 65535 {
-		return core.Node{}, errors.New(i18n.T("端口不是数字"))
+	if port, err = portNumber("vmess", port); err != nil {
+		return core.Node{}, err
 	}
 
 	aid, _ := number(v.Aid)
@@ -226,9 +226,9 @@ func vless(link string) (core.Node, error) {
 	if u.User == nil {
 		return core.Node{}, errors.New(i18n.T("vless: 缺少用户"))
 	}
-	port, err := strconv.Atoi(u.Port())
+	port, err := portText("vless", u.Port())
 	if err != nil {
-		return core.Node{}, errors.New(i18n.T("vless: 缺少端口"))
+		return core.Node{}, err
 	}
 	q := u.Query()
 	transport, err := network(q.Get("type"))
@@ -269,9 +269,9 @@ func trojan(link string) (core.Node, error) {
 	if u.User == nil {
 		return core.Node{}, errors.New(i18n.T("trojan: 缺少密码"))
 	}
-	port, err := strconv.Atoi(u.Port())
+	port, err := portText("trojan", u.Port())
 	if err != nil {
-		return core.Node{}, errors.New(i18n.T("trojan: 缺少端口"))
+		return core.Node{}, err
 	}
 	q := u.Query()
 	transport, err := network(q.Get("type"))
@@ -312,9 +312,9 @@ func hysteria2(link string) (core.Node, error) {
 	if u.User == nil {
 		return core.Node{}, errors.New(i18n.T("hysteria2: 缺少密码"))
 	}
-	port, err := strconv.Atoi(u.Port())
+	port, err := portText("hysteria2", u.Port())
 	if err != nil {
-		return core.Node{}, errors.New(i18n.T("hysteria2: 缺少端口"))
+		return core.Node{}, err
 	}
 	q := u.Query()
 	return core.Node{
@@ -341,9 +341,9 @@ func tuic(link string) (core.Node, error) {
 	if u.User == nil {
 		return core.Node{}, errors.New(i18n.T("tuic: 缺少凭据"))
 	}
-	port, err := strconv.Atoi(u.Port())
+	port, err := portText("tuic", u.Port())
 	if err != nil {
-		return core.Node{}, errors.New(i18n.T("tuic: 缺少端口"))
+		return core.Node{}, err
 	}
 	uuid := u.User.Username()
 	password, _ := u.User.Password()
@@ -366,12 +366,13 @@ func tuic(link string) (core.Node, error) {
 func shadowsocks(link string) (core.Node, error) {
 	body := strings.TrimPrefix(link, "ss://")
 	given := ""
+	query := ""
 	if i := strings.LastIndex(body, "#"); i >= 0 {
 		given, _ = url.QueryUnescape(body[i+1:])
 		body = body[:i]
 	}
 	if i := strings.Index(body, "?"); i >= 0 {
-
+		query = body[i+1:]
 		body = body[:i]
 	}
 
@@ -402,22 +403,31 @@ func shadowsocks(link string) (core.Node, error) {
 	if !ok {
 		return core.Node{}, errors.New(i18n.T("ss: 缺少密码"))
 	}
-	host, portText, err := net.SplitHostPort(address)
+	host, portNumber, err := net.SplitHostPort(address)
 	if err != nil {
 		return core.Node{}, err
 	}
-	port, err := strconv.Atoi(portText)
+	port, err := portText("ss", portNumber)
 	if err != nil {
 		return core.Node{}, err
 	}
-	return core.Node{
+	node := core.Node{
 		Name:     name(given, host, port),
 		Protocol: "shadowsocks",
 		Server:   host,
 		Port:     port,
 		Method:   method,
 		Password: password,
-	}, nil
+	}
+	if query != "" {
+		values, _ := url.ParseQuery(query)
+		if plugin := values.Get("plugin"); plugin != "" {
+			parts := strings.Split(plugin, ";")
+			node.Plugin = parts[0]
+			node.PluginOpts = strings.Join(parts[1:], ";")
+		}
+	}
+	return node, nil
 }
 
 func decode(text string) (string, bool) {
@@ -434,6 +444,21 @@ func decode(text string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+func portNumber(protocol string, port int) (int, error) {
+	if port < 1 || port > 65535 {
+		return 0, fmt.Errorf(i18n.T("%s: 端口不是 1 到 65535 的数字"), protocol)
+	}
+	return port, nil
+}
+
+func portText(protocol, text string) (int, error) {
+	port, err := strconv.Atoi(text)
+	if err != nil {
+		port = 0
+	}
+	return portNumber(protocol, port)
 }
 
 func number(raw json.RawMessage) (int, error) {
@@ -604,9 +629,12 @@ func clashNode(one map[string]any) (core.Node, error) {
 		return core.Node{}, fmt.Errorf(i18n.T("不认识的协议 %s"), kind)
 	}
 	server := field(one, "server")
-	port := num(one, "port")
-	if server == "" || port <= 0 || port > 65535 {
+	if server == "" {
 		return core.Node{}, errors.New(i18n.T("缺少服务器或端口"))
+	}
+	port, err := portNumber(kind, num(one, "port"))
+	if err != nil {
+		return core.Node{}, err
 	}
 	transport, err := network(field(one, "network"))
 	if err != nil {
@@ -685,9 +713,12 @@ func singBoxNode(one map[string]any) (core.Node, error) {
 		return core.Node{}, fmt.Errorf(i18n.T("不认识的协议 %s"), kind)
 	}
 	server := field(one, "server")
-	port := num(one, "server_port")
-	if server == "" || port <= 0 || port > 65535 {
+	if server == "" {
 		return core.Node{}, errors.New(i18n.T("缺少服务器或端口"))
+	}
+	port, err := portNumber(kind, num(one, "server_port"))
+	if err != nil {
+		return core.Node{}, err
 	}
 	transport := obj(one, "transport")
 	protocolNetwork, err := network(field(transport, "type"))
@@ -715,6 +746,8 @@ func singBoxNode(one map[string]any) (core.Node, error) {
 	case "shadowsocks":
 		node.Method = field(one, "method")
 		node.Password = field(one, "password")
+		node.Plugin = field(one, "plugin")
+		node.PluginOpts = field(one, "plugin_opts")
 	case "hysteria2":
 		node.Password = field(one, "password")
 		node.Obfs = field(obj(one, "obfs"), "type")

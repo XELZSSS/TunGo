@@ -222,7 +222,7 @@ func (a *app) routingMenu(c *ui.Context, m *ui.Menu) {
 func (a *app) settingsMenu(c *ui.Context, m *ui.Menu) {
 	m.Submenu(i18n.T("内核"), func(p *ui.Menu) { a.kernelMenu(c, p) })
 	m.Submenu(i18n.T("主题"), func(p *ui.Menu) {
-		for _, name := range Themes {
+		for _, name := range themes {
 			if p.Item(themeLabel(name)).Radio(a.themeName == name).Chosen() {
 				a.setTheme(name)
 			}

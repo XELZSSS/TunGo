@@ -182,16 +182,8 @@ type Policy struct {
 	DNS     DNS
 }
 
-func LoadPolicy() (Policy, error) {
-	routing, err := LoadRouting()
-	if err != nil {
-		return Policy{}, err
-	}
-	dns, err := LoadDNS()
-	if err != nil {
-		return Policy{}, err
-	}
-	return Policy{Routing: routing, DNS: dns}, nil
+func LoadPolicy() Policy {
+	return Policy{Routing: LoadRouting(), DNS: LoadDNS()}
 }
 
 type RoutingItem struct {
@@ -212,11 +204,10 @@ func DefaultRoutingSet() RoutingSet {
 	return set
 }
 
-func LoadRoutingSet() (RoutingSet, error) {
+func LoadRoutingSet() RoutingSet {
 	var set RoutingSet
-	err := appdir.ReadJSON("routing.json", &set)
-	if err != nil || len(set.Items) == 0 {
-		backupBrokenRouting()
+	if err := appdir.ReadJSON("routing.json", &set); err != nil || len(set.Items) == 0 {
+		backupBroken("routing.json")
 		set = DefaultRoutingSet()
 	}
 	if set.Item(set.Current) == nil {
@@ -227,20 +218,19 @@ func LoadRoutingSet() (RoutingSet, error) {
 			set.Items = append(set.Items, RoutingItem{Name: name, Routing: PresetRouting(name)})
 		}
 	}
-	return set, err
+	return set
 }
 
-func backupBrokenRouting() {
+func backupBroken(name string) {
 	dir, err := appdir.Dir()
 	if err != nil {
 		return
 	}
-	from := filepath.Join(dir, "routing.json")
+	from := filepath.Join(dir, name)
 	if _, err := os.Stat(from); err != nil {
 		return
 	}
-	to := from + "." + time.Now().Format("20060102-150405") + ".bak"
-	os.Rename(from, to)
+	os.Rename(from, from+"."+time.Now().Format("20060102-150405")+".bak")
 }
 
 func SaveRoutingSet(set RoutingSet) error { return appdir.WriteJSON("routing.json", set) }
@@ -290,15 +280,17 @@ func (s *RoutingSet) Remove(name string) {
 	}
 }
 
-func LoadRouting() (Routing, error) {
-	set, err := LoadRoutingSet()
-	return set.Routing(), err
+func LoadRouting() Routing {
+	return LoadRoutingSet().Routing()
 }
 
-func LoadDNS() (DNS, error) {
+func LoadDNS() DNS {
 	dns := DefaultDNS()
-	err := appdir.ReadJSON("dns.json", &dns)
-	return dns, err
+	if err := appdir.ReadJSON("dns.json", &dns); err != nil {
+		backupBroken("dns.json")
+		return DefaultDNS()
+	}
+	return dns
 }
 
 func SaveDNS(dns DNS) error { return appdir.WriteJSON("dns.json", dns) }

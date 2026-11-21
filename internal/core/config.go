@@ -127,7 +127,7 @@ func SecurityOf(n Node) string {
 
 func carriesTLS(protocol string) bool {
 	switch protocol {
-	case "vmess", "vless", "trojan", "hysteria2", "tuic":
+	case "vmess", "vless", "trojan", "hysteria2", "tuic", "http":
 		return true
 	}
 	return false

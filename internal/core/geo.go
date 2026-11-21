@@ -1,12 +1,11 @@
 package core
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 func geoKindTag(entry string) (kind, tag string) {
@@ -44,27 +43,41 @@ func ruleSetDir() string {
 }
 
 type fileList struct {
-	digest string
-	lines  []string
+	size  int64
+	mod   time.Time
+	lines []string
 }
 
 var lists sync.Map
 
 func cachedList(path string, parse func([]string) []string) []string {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil
+	}
+	if one, ok := lists.Load(path); ok {
+		if kept := one.(fileList); kept.size == info.Size() && kept.mod.Equal(info.ModTime()) {
+			return kept.lines
+		}
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil
 	}
-	sum := sha256.Sum256(data)
-	digest := hex.EncodeToString(sum[:])
-	if one, ok := lists.Load(path); ok {
-		if kept := one.(fileList); kept.digest == digest {
-			return kept.lines
+	lines := parse(listLines(string(data)))
+	lists.Store(path, fileList{size: info.Size(), mod: info.ModTime(), lines: lines})
+	return lines
+}
+
+func listLines(text string) []string {
+	raw := strings.Split(text, "\n")
+	out := make([]string, 0, len(raw))
+	for _, line := range raw {
+		if line = strings.TrimSpace(line); line != "" {
+			out = append(out, line)
 		}
 	}
-	lines := parse(strings.Split(string(data), "\n"))
-	lists.Store(path, fileList{digest: digest, lines: lines})
-	return lines
+	return out
 }
 
 func domainFile(path string) []string {
@@ -81,18 +94,36 @@ func domainFile(path string) []string {
 		return out
 	})
 }
-func rawLines(path string) []string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-	var out []string
-	for _, line := range strings.Split(string(data), "\n") {
-		if line = strings.TrimSpace(line); line != "" {
-			out = append(out, line)
-		}
-	}
-	return out
+
+var privateCIDRs = []string{
+	"::/127",
+	"0.0.0.0/8",
+	"10.0.0.0/8",
+	"100::/64",
+	"100.64.0.0/10",
+	"127.0.0.0/8",
+	"169.254.0.0/16",
+	"172.16.0.0/12",
+	"192.0.0.0/24",
+	"192.0.2.0/24",
+	"192.168.0.0/16",
+	"192.31.196.0/24",
+	"192.52.193.0/24",
+	"192.88.99.0/24",
+	"198.18.0.0/15",
+	"198.51.100.0/24",
+	"2001::/23",
+	"2001:db8::/32",
+	"203.0.113.0/24",
+	"224.0.0.0/3",
+	"2620:4f:8000::/48",
+	"3fff::/20",
+	"5f00::/16",
+	"64:ff9b::/96",
+	"64:ff9b:1::/48",
+	"fc00::/7",
+	"fe80::/10",
+	"ff00::/8",
 }
 
 func xrayGeo(entries []string) (domains []string) {
@@ -109,6 +140,10 @@ func xrayGeo(entries []string) (domains []string) {
 func xrayGeoIPs(entries []string) (cidrs []string) {
 	for _, entry := range entries {
 		if kind, tag := geoKindTag(entry); kind == "geoip" {
+			if tag == "private" {
+				cidrs = append(cidrs, privateCIDRs...)
+				continue
+			}
 			if path := ruleSetPath("geoip-" + tag + ".cidrs.txt"); path != "" {
 				cidrs = append(cidrs, fileLines(path)...)
 			}

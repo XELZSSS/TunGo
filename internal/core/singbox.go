@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"sort"
@@ -75,6 +76,10 @@ func singBoxOutbound(n Node) (map[string]any, error) {
 	case "shadowsocks":
 		out["method"] = n.Method
 		out["password"] = n.Password
+		if n.Plugin != "" {
+			out["plugin"] = n.Plugin
+			out["plugin_opts"] = n.PluginOpts
+		}
 	case "vmess":
 		out["uuid"] = n.UUID
 		out["security"] = vmessSecurity(n)
@@ -98,7 +103,13 @@ func singBoxOutbound(n Node) (map[string]any, error) {
 			out["congestion_control"] = n.Congestion
 		}
 	}
-	if SecurityOf(n) != "" && carriesTLS(n.Protocol) {
+	if security := SecurityOf(n); security != "" {
+		if strings.Contains(n.ECH, "://") {
+			return nil, errors.New(i18n.T("ECH 要填配置内容，不能填链接"))
+		}
+		if !carriesTLS(n.Protocol) {
+			return nil, fmt.Errorf(i18n.T("sing-box 的 %s 出站不支持 TLS：去掉 TLS 或换用 xray"), n.Protocol)
+		}
 		out["tls"] = singBoxTLS(n)
 	}
 	if carriesTransport(n.Protocol) && n.Network != "" && n.Network != "tcp" {
@@ -117,7 +128,7 @@ func singBoxTLS(n Node) map[string]any {
 	if alpn := alpnOf(n); len(alpn) > 0 {
 		tls["alpn"] = alpn
 	}
-	if n.ECH != "" && !strings.Contains(n.ECH, "://") {
+	if n.ECH != "" {
 		tls["ech"] = singBoxECH(n.ECH)
 	}
 	fingerprint := n.Fingerprint

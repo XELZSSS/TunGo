@@ -3,19 +3,25 @@ package i18n
 import (
 	_ "embed"
 	"encoding/json"
+	"fmt"
+	"os"
 	"regexp"
-	"sync"
+	"sync/atomic"
 )
 
 //go:embed lang/en.json
 var english []byte
 
-var (
-	mu   sync.RWMutex
-	lang = "zh"
-)
+type translations struct {
+	lang string
+	dict map[string]string
+}
+
+var current atomic.Pointer[translations]
 
 var en = load()
+
+func init() { Set("") }
 
 func load() map[string]string {
 	dict := map[string]string{}
@@ -25,6 +31,7 @@ func load() map[string]string {
 	for zh, en := range dict {
 		if verbs(zh) != verbs(en) {
 			delete(dict, zh)
+			fmt.Fprintln(os.Stderr, "i18n：格式动词对不上，跳过", zh)
 		}
 	}
 	return dict
@@ -45,26 +52,19 @@ func verbs(text string) string {
 }
 
 func Set(l string) {
-	mu.Lock()
-	defer mu.Unlock()
+	lang := "zh"
 	if l == "en" {
 		lang = "en"
-		return
 	}
-	lang = "zh"
+	current.Store(&translations{lang: lang, dict: en})
 }
 
-func Lang() string {
-	mu.RLock()
-	defer mu.RUnlock()
-	return lang
-}
+func Lang() string { return current.Load().lang }
 
 func T(zh string) string {
-	mu.RLock()
-	defer mu.RUnlock()
-	if lang == "en" {
-		if text, ok := en[zh]; ok {
+	cur := current.Load()
+	if cur.lang == "en" {
+		if text, ok := cur.dict[zh]; ok {
 			return text
 		}
 	}

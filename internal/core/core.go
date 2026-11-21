@@ -68,6 +68,13 @@ func (k Kind) Capabilities() Capabilities {
 	return Capabilities{Stats: sing, CloseConnections: sing}
 }
 
+func (k Kind) Strategies() []string {
+	if k == SingBox {
+		return []string{"leastPing", "fallback"}
+	}
+	return GroupStrategies
+}
+
 const (
 	startTimeout    = 15 * time.Second
 	tunTimeout      = 45 * time.Second
@@ -246,10 +253,7 @@ func Start(kind Kind, n Node, socks string, tun bool) (*Kernel, error) {
 	if err != nil {
 		return nil, err
 	}
-	policy, err := LoadPolicy()
-	if err != nil {
-		return nil, err
-	}
+	policy := LoadPolicy()
 	timeout := startTimeout
 	tunName := ""
 	if tun {

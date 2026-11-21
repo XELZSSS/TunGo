@@ -70,7 +70,7 @@ func (a *app) installApp() {
 	a.releases.installing = true
 	a.releases.dialog = true
 	a.releases.part, a.releases.whole = 0, 0
-	drain := a.drain
+	drain := a.currentDrain()
 	a.hint(fmt.Sprintf(i18n.T("正在下载 %s…"), update.Version))
 	go func() {
 		if drain != nil {

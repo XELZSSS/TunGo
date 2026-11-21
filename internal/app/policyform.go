@@ -334,13 +334,7 @@ func (a *app) openRouting() {
 }
 
 func (a *app) openDNS() {
-	dns, err := core.LoadDNS()
-	if err != nil {
-
-		a.fail(err.Error())
-		a.logf("%s", err)
-		dns = core.DefaultDNS()
-	}
+	dns := core.LoadDNS()
 	a.dnsWas = dns
 	a.dnsRemote = dns.Remote
 	a.dnsDirect = dns.Direct

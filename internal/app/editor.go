@@ -57,6 +57,10 @@ func (a *app) nodeForm(c *ui.Context) {
 							ui.TextInput(c, &a.draft.Method).Label(i18n.T("加密方式")).Placeholder("aes-256-gcm").Grow(1)
 							ui.TextInput(c, &a.draft.Password).Label(i18n.T("密码")).Password().Grow(1)
 						})
+						ui.Row(c).Gap(gapBase).Children(func() {
+							ui.TextInput(c, &a.draft.Plugin).Label(i18n.T("插件")).Placeholder("obfs-local").Grow(1)
+							ui.TextInput(c, &a.draft.PluginOpts).Label(i18n.T("插件参数")).Placeholder("obfs=http;obfs-host=example.com").Grow(1)
+						})
 					case "socks", "http":
 						ui.Row(c).Gap(gapBase).Children(func() {
 							ui.TextInput(c, &a.draft.Username).Label(i18n.T("用户名")).Grow(1)
@@ -199,6 +203,7 @@ func (a *app) commit() {
 		a.appendNodes(a.draft)
 		a.chosen = len(a.nodes) - 1
 	}
+	a.nodesChanged()
 	a.save()
 	a.logf(i18n.T("已保存节点：%s（%s）"), a.draft.Name, a.draft.Summary())
 	a.editing = false

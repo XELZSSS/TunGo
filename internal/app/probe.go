@@ -30,13 +30,13 @@ func measure(ctx context.Context, kind core.Kind, node core.Node, speed bool) (i
 	if err := ctx.Err(); err != nil {
 		return -1, 0, err
 	}
-	measureSlots <- struct{}{}
-	defer func() { <-measureSlots }()
-	socks, err := kernelInbound()
-	if err != nil {
-		return -1, 0, err
+	select {
+	case measureSlots <- struct{}{}:
+	case <-ctx.Done():
+		return -1, 0, ctx.Err()
 	}
-	kernel, err := core.Start(kind, node, socks, false)
+	defer func() { <-measureSlots }()
+	kernel, err := startKernel(kind, node, false)
 	if err != nil {
 		return -1, 0, err
 	}
@@ -136,10 +136,12 @@ func (a *app) realPing(i int) {
 			}
 			if err != nil {
 				a.ms[at] = -1
+				a.rowsDirty = true
 				a.logf(i18n.T("%s：%s"), node.Name, err)
 				return
 			}
 			a.ms[at] = ms
+			a.rowsDirty = true
 			a.logf(i18n.T("%s：%d ms"), node.Name, ms)
 		})
 	}()
@@ -163,11 +165,13 @@ func (a *app) speedTest(i int) {
 			}
 			if err != nil {
 				a.speed[at] = 0
+				a.rowsDirty = true
 				a.logf(i18n.T("%s：%s"), node.Name, err)
 				return
 			}
 			a.ms[at] = ms
 			a.speed[at] = mb
+			a.rowsDirty = true
 			a.logf(i18n.T("%s：%d ms，%.1f MB/s"), node.Name, ms, mb)
 		})
 	}()

@@ -105,11 +105,15 @@ func (a *app) pingAt(node core.Node) {
 	a.update(func() {
 		if at := a.indexOfNode(node); at >= 0 {
 			a.ms[at] = ms
+			a.rowsDirty = true
 		}
 	})
 }
 
 func (a *app) groupNames() []string {
+	if a.groupsAt == a.nodesVersion && a.groups != nil {
+		return a.groups
+	}
 	names := []string{i18n.T("全部")}
 	seen := map[string]bool{}
 	for _, node := range a.nodes {
@@ -120,13 +124,23 @@ func (a *app) groupNames() []string {
 		seen[name] = true
 		names = append(names, name)
 	}
+	a.groups, a.groupsAt = names, a.nodesVersion
 	return names
 }
 
 func (a *app) syncRows() {
+	column, desc := "", false
+	if order := a.list.Sort; order != nil {
+		column, desc = order.Column, order.Descending
+	}
+	if !a.rowsDirty && a.group == a.rowsGroup && column == a.rowsColumn && desc == a.rowsDesc {
+		return
+	}
+	a.rowsDirty = false
+	a.rowsGroup, a.rowsColumn, a.rowsDesc = a.group, column, desc
 	shown := a.shown[:0]
 	for i, node := range a.nodes {
-		if a.group != "" && groupName(node) != a.group {
+		if a.group != "" && node.Sub != a.group {
 			continue
 		}
 		shown = append(shown, i)
@@ -187,11 +201,6 @@ func (a *app) sortKey(at int, column string) (int64, bool) {
 	}
 	return 0, false
 }
-
-func groupName(node core.Node) string {
-	return node.Sub
-}
-
 func (a *app) indexOfNode(was core.Node) int {
 	if was.Name == "" {
 		return -1
@@ -263,6 +272,9 @@ func security(node core.Node) string {
 }
 
 func sameNode(one, other core.Node) bool {
+	if one.Name != other.Name || one.Protocol != other.Protocol || one.Server != other.Server || one.Port != other.Port {
+		return false
+	}
 	return reflect.DeepEqual(plainNode(one), plainNode(other))
 }
 
