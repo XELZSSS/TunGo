@@ -1,75 +1,82 @@
 # TunGo
 
-本地代理客户端：一个 SOCKS5 + HTTP 混合代理，流量交给 sing-box 或 xray，节点来自订阅或分享链接，使用 [Go](https://github.com/golang/go) + [MyGo](https://github.com/egoist/mygo) 编写，实现方式参考 [NekoBox](https://github.com/qr243vbi/nekobox) 和 [v2rayN](https://github.com/2dust/v2rayN)
+English | [中文](README_CN.md)
 
-## 应用功能
+[![Go](https://img.shields.io/badge/Go-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev/)
+[![MyGo](https://img.shields.io/badge/MyGo-0891B2?style=flat-square)](https://github.com/egoist/mygo)
+[![sing-box](https://img.shields.io/badge/sing--box-1677FF?style=flat-square)](https://github.com/SagerNet/sing-box)
+[![Xray](https://img.shields.io/badge/Xray-6C5CE7?style=flat-square)](https://github.com/XTLS/Xray-core)
 
-- 导入订阅或分享链接，支持 vmess、vless、trojan、ss、hysteria2、tuic、socks、http
-- 测 TCP 延迟、真连接延迟和下载速度，可按延迟排序
-- 策略组按最低延迟、故障转移、随机、轮询、最低负载自动选节点
-- 系统代理、PAC、TUN 三种接管方式，TUN 要管理员权限
-- sing-box 与 xray 双内核，默认 sing-box，可手动切换
-- 路由与 DNS 可改，按域名、IP、端口、网络、协议分流，规则集随包附带
-- 内置规则集拦截广告与追踪域名
+A local proxy client that combines SOCKS5 and HTTP proxies. Traffic is handled by sing-box or xray, with nodes loaded from subscriptions or share links. TunGo is written in [Go](https://github.com/golang/go) and [MyGo](https://github.com/egoist/mygo), with implementation references from [NekoBox](https://github.com/qr243vbi/nekobox) and [v2rayN](https://github.com/2dust/v2rayN).
 
-## 项目结构
+## Features
+
+- Import subscriptions or share links, supporting vmess, vless, trojan, ss, hysteria2, tuic, socks and http
+- Measure TCP latency, real connection latency and download speed, with sorting by latency
+- Policy groups select nodes automatically by lowest latency, failover, random, round-robin or lowest load
+- Three traffic capture modes: system proxy, PAC and TUN; TUN requires administrator privileges
+- Dual cores with sing-box and xray; sing-box is the default and can be switched manually
+- Configurable routing and DNS, with splitting by domain, IP, port, network and protocol; rule sets are bundled
+- Built-in rule sets block advertising and tracking domains
+
+## Getting Started
+
+1. Under **Subscription**, enter a subscription URL, or choose **Server → Import from Clipboard** and paste a share link.
+2. Double-click a node, then click **Start**.
+
+## Project Structure
 
 ```text
 TunGo/
-├── main.go                程序入口
+├── main.go                  Application entry point
 ├── internal/
-│   ├── app/               界面与交互
-│   ├── core/              内核与配置生成
-│   ├── proxy/             本地代理
-│   ├── sub/               订阅与分享链接
-│   ├── sysproxy/          系统代理
-│   ├── appdir/            数据目录
-│   ├── backup/            备份与恢复
-│   ├── logs/              日志
-│   └── i18n/              多语言文案
+│   ├── app/                 Interface and interaction
+│   ├── core/                Cores and configuration generation
+│   ├── proxy/               Local proxy
+│   ├── sub/                 Subscriptions and share links
+│   ├── sysproxy/            System proxy
+│   ├── appdir/              Data directory
+│   ├── backup/              Backup and restore
+│   ├── logs/                Logs
+│   └── i18n/                Localized strings
 ├── resources/
-│   ├── bin/               内核与规则集
-│   ├── icons/             界面图标
-│   ├── icon.png           应用图标
-│   ├── TunGo.svg          应用图标
-│   └── resources.go       图标嵌入
-├── mygo.json              打包配置
+│   ├── bin/                 Cores and rule sets
+│   ├── icons/               Interface icons
+│   ├── icon.png             Application icon
+│   ├── TunGo.svg            Application icon
+│   └── resources.go         Icon embedding
+├── mygo.json                Packaging configuration
 ├── go.mod
 ├── LICENSE
 └── README.md
 ```
 
-`app` 负责界面与交互，其余各包按职责分层，依赖单向、没有循环
+`app` handles the interface and interaction. The other packages are separated by responsibility with single-direction dependencies and no cycles.
 
-## 开始使用
+## Data Directory
 
-1. 「订阅」填地址，或「服务器 → 从剪贴板导入」粘贴分享链接
-2. 双击节点，按「启动」
+The default location is `%LOCALAPPDATA%\TunGo`. Uninstalling the application also removes its data. Set the `TUNGO_DATA` environment variable to use a different location.
 
-## 数据目录
-
-默认在 `%LOCALAPPDATA%\TunGo`，卸载会连同数据一起删除；设环境变量 `TUNGO_DATA` 可换位置
-
-| 文件 | 内容 |
+| File | Contents |
 | --- | --- |
-| `nodes.json` | 节点与策略组 |
-| `subscription.json` | 订阅地址、更新间隔、上次更新时间 |
-| `routing.json` | 路由方案与规则 |
-| `dns.json` | DNS 设置 |
-| `settings.json` | 主题、语言、端口、快捷键等 |
-| `backups/` | 备份 zip，保留最近 10 份 |
-| `logs/` | 按天切分的日志，保留 7 天 |
+| `nodes.json` | Nodes and policy groups |
+| `subscription.json` | Subscription URLs, update interval and last update time |
+| `routing.json` | Routing profiles and rules |
+| `dns.json` | DNS settings |
+| `settings.json` | Theme, language, ports, shortcuts and other settings |
+| `backups/` | Backup ZIP files; the latest 10 are kept |
+| `logs/` | Daily log files; logs are kept for 7 days |
 
-## 构建
+## Build
 
 ```sh
 go tool mygo build -platform windows/amd64
 ```
 
-产物在 `build\windows-amd64\`，包含 `TunGo.exe`、安装包和随包分发的资源
+The output is written to `build\windows-amd64\`, including `TunGo.exe`, the installer and bundled resources.
 
-目前只提供 Windows 版本，macOS 与 Linux 请自行构建测试
+Windows is currently the only officially provided build. macOS and Linux can be built and tested manually.
 
-## 许可证
+## License
 
 [MIT](LICENSE)
