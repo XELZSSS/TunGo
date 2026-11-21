@@ -15,15 +15,64 @@ import (
 )
 
 const (
-	rulesetURL = "https://raw.githubusercontent.com/2dust/sing-box-rules/rule-set-"
-	adblockSRS = "https://raw.githubusercontent.com/217heidai/adblockfilters/dist/adblocksingbox.srs"
+	ruleSetBase = "2dust/sing-box-rules/rule-set-"
+	adblockPath = "217heidai/adblockfilters/dist/adblocksingbox.srs"
+	defaultBase = "https://raw.githubusercontent.com/"
 )
+
+var sourceBase = defaultBase
+
+func SetSourceBase(base string) {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		base = defaultBase
+	}
+	if !strings.HasSuffix(base, "/") {
+		base += "/"
+	}
+	sourceBase = base
+}
+
+func SourceBase() string { return sourceBase }
 
 func ruleSetURL(kind, tag string) string {
 	if kind == "geosite" && tag == "adblock" {
-		return adblockSRS
+		return sourceBase + adblockPath
 	}
-	return rulesetURL + kind + "/" + kind + "-" + tag + ".srs"
+	return sourceBase + ruleSetBase + kind + "/" + kind + "-" + tag + ".srs"
+}
+
+func RefreshRuleSets(kind Kind) (int, error) {
+	dir := ruleSetDir()
+	if dir == "" {
+		return 0, errors.New(i18n.T("找不到规则集目录"))
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0, err
+	}
+	updated := 0
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".srs") {
+			continue
+		}
+		setKind, tag, ok := strings.Cut(strings.TrimSuffix(name, ".srs"), "-")
+		if !ok {
+			continue
+		}
+		path := filepath.Join(dir, name)
+		if err := fetchRuleSet(ruleSetURL(setKind, tag), path); err != nil {
+			return updated, fmt.Errorf("%s: %w", name, err)
+		}
+		if kind == Xray {
+			if err := decompile(path, strings.TrimSuffix(path, ".srs")); err != nil {
+				return updated, err
+			}
+		}
+		updated++
+	}
+	return updated, nil
 }
 
 func have(entry string, kind Kind) bool {

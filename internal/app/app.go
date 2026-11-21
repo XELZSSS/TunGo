@@ -98,6 +98,8 @@ func (a *app) loadAll() error {
 	a.tun = remembered.Tun
 	a.port = remembered.Port
 	a.applied = remembered.Applied
+	a.ruleBase = remembered.RuleBase
+	core.SetSourceBase(a.ruleBase)
 	if a.applied != "" {
 		if err := sysproxy.Reset(); err == nil {
 			a.applied = ""
@@ -169,8 +171,9 @@ func (a *app) saveSettings() {
 	saved := settings{
 		Skipped: a.skipped, Kind: a.kind, Theme: a.themeName, Lang: i18n.Lang(),
 		Proxy: a.proxy, ProxyOn: a.proxyOn, Tun: a.tun, Shortcuts: a.shortcuts,
-		Applied: a.applied,
-		Port:    a.port,
+		Applied:  a.applied,
+		Port:     a.port,
+		RuleBase: a.ruleBase,
 	}
 	if err := saved.save(); err != nil {
 		a.logf(i18n.T("保存设置失败：%s"), err)

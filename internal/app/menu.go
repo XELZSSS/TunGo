@@ -113,6 +113,9 @@ func (a *app) serversMenu(c *ui.Context, m *ui.Menu) {
 			a.after(func() { a.pingNode(a.chosen) })
 		}
 	})
+	if m.Item(i18n.T("检测当前节点解锁")).Disabled(empty || direct || !a.connected()).Chosen() {
+		a.checkUnlock()
+	}
 	m.Separator()
 	if m.Item(i18n.T("添加策略组")).Chosen() {
 		a.after(a.addGroup)
@@ -213,6 +216,15 @@ func (a *app) routingMenu(c *ui.Context, m *ui.Menu) {
 	}
 	m.Separator()
 	m.Submenu(i18n.T("区域预置"), func(p *ui.Menu) { a.regionMenu(c, p) })
+	m.Separator()
+	m.Submenu(i18n.T("规则集"), func(p *ui.Menu) {
+		if p.Item(i18n.T("镜像源设置")).Chosen() {
+			a.openRuleBase()
+		}
+		if p.Item(i18n.T("更新全部规则集")).Chosen() {
+			a.refreshRuleSets()
+		}
+	})
 	if m.Item(i18n.T("忽略缺失的规则集并连接")).Chosen() {
 		a.ignoreRules = true
 		a.connect()
@@ -244,6 +256,11 @@ func (a *app) settingsMenu(c *ui.Context, m *ui.Menu) {
 			}
 		}
 	})
+	if sysproxy.LoopbackAvailable() {
+		if m.Item(i18n.T("放行 Store 应用回环（UWP）")).Chosen() {
+			a.exemptLoopback()
+		}
+	}
 	if m.Item(i18n.T("开机自启")).Checked(mygo.App.OpenAtLogin()).Chosen() {
 		if err := mygo.App.SetOpenAtLogin(!mygo.App.OpenAtLogin()); err != nil {
 			a.fail(err.Error())
@@ -355,6 +372,7 @@ func (a *app) addProtocol(protocol string) {
 	}
 	a.draftPort = fmt.Sprint(a.draft.Port)
 	a.alterID = "0"
+	a.muxText = ""
 	a.alpn = ""
 	a.draftWas = core.Node{}
 	a.detourName = ""
@@ -369,6 +387,10 @@ func (a *app) edit(i int) {
 	a.draft = a.nodes[i]
 	a.draftPort = fmt.Sprint(a.draft.Port)
 	a.alterID = fmt.Sprint(a.draft.AlterID)
+	a.muxText = ""
+	if a.draft.Mux > 0 {
+		a.muxText = fmt.Sprint(a.draft.Mux)
+	}
 	a.alpn = strings.Join(a.draft.ALPN, ",")
 	a.draftWas = a.nodes[i]
 	a.detourName = ""

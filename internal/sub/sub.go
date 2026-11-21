@@ -19,42 +19,69 @@ import (
 	"tungo/internal/i18n"
 )
 
-func Fetch(from string) ([]core.Node, error) {
-	return fetch(from, &http.Client{Timeout: time.Minute})
+func Fetch(from, ua string) ([]core.Node, Info, error) {
+	return fetch(from, ua, &http.Client{Timeout: time.Minute})
 }
 
-func FetchProxied(from, socksAddr string) ([]core.Node, error) {
+func FetchProxied(from, socksAddr, ua string) ([]core.Node, Info, error) {
 	addr, err := url.Parse("socks5://" + socksAddr)
 	if err != nil {
-		return nil, err
+		return nil, Info{}, err
 	}
 	transport := &http.Transport{Proxy: http.ProxyURL(addr), IdleConnTimeout: 30 * time.Second}
 	defer transport.CloseIdleConnections()
-	return fetch(from, &http.Client{Timeout: time.Minute, Transport: transport})
+	return fetch(from, ua, &http.Client{Timeout: time.Minute, Transport: transport})
 }
 
-func fetch(from string, client *http.Client) ([]core.Node, error) {
+func fetch(from, ua string, client *http.Client) ([]core.Node, Info, error) {
 	req, err := http.NewRequest("GET", from, nil)
 	if err != nil {
-		return nil, err
+		return nil, Info{}, err
 	}
-	req.Header.Set("User-Agent", "TunGo")
+	if ua == "" {
+		ua = "TunGo"
+	}
+	req.Header.Set("User-Agent", ua)
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, Info{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf(i18n.T("订阅返回 %s"), resp.Status)
+		return nil, Info{}, fmt.Errorf(i18n.T("订阅返回 %s"), resp.Status)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20+1))
 	if err != nil {
-		return nil, err
+		return nil, Info{}, err
 	}
 	if len(body) > 8<<20 {
-		return nil, errors.New(i18n.T("订阅内容超过 8MB，已停止导入"))
+		return nil, Info{}, errors.New(i18n.T("订阅内容超过 8MB，已停止导入"))
 	}
-	return Parse(body)
+	nodes, err := Parse(body)
+	return nodes, userInfo(resp.Header.Get("subscription-userinfo")), err
+}
+
+func userInfo(header string) Info {
+	var info Info
+	for _, field := range strings.Split(header, ";") {
+		key, value, ok := strings.Cut(strings.TrimSpace(field), "=")
+		if !ok {
+			continue
+		}
+		number, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+		if err != nil {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(key)) {
+		case "upload", "download":
+			info.Used += number
+		case "total":
+			info.Total = number
+		case "expire":
+			info.Expire = number
+		}
+	}
+	return info
 }
 
 func Parse(data []byte) ([]core.Node, error) {
@@ -113,6 +140,8 @@ func Link(link string) (core.Node, error) {
 		return hysteria2(link)
 	case strings.HasPrefix(link, "tuic://"):
 		return tuic(link)
+	case strings.HasPrefix(link, "anytls://"):
+		return anytls(link)
 	case strings.HasPrefix(link, "socks://"), strings.HasPrefix(link, "socks5://"),
 		strings.HasPrefix(link, "http://"), strings.HasPrefix(link, "https://"):
 		return proxy(link)
@@ -360,6 +389,36 @@ func tuic(link string) (core.Node, error) {
 		Insecure:   q.Get("allow_insecure") == "1" || q.Get("insecure") == "1",
 		ALPN:       list(q.Get("alpn")),
 		Congestion: q.Get("congestion_control"),
+	}, nil
+}
+
+func anytls(link string) (core.Node, error) {
+	u, err := url.Parse(link)
+	if err != nil {
+		return core.Node{}, err
+	}
+	if u.User == nil {
+		return core.Node{}, errors.New(i18n.T("anytls: 缺少密码"))
+	}
+	port, err := portText("anytls", u.Port())
+	if err != nil {
+		return core.Node{}, err
+	}
+	password := u.User.Username()
+	if given, ok := u.User.Password(); ok {
+		password = given
+	}
+	q := u.Query()
+	return core.Node{
+		Name:       name(u.Fragment, u.Hostname(), port),
+		Protocol:   "anytls",
+		Server:     u.Hostname(),
+		Port:       port,
+		Password:   password,
+		TLS:        "tls",
+		ServerName: first(q.Get("sni"), q.Get("peer")),
+		Insecure:   q.Get("insecure") == "1" || strings.EqualFold(q.Get("insecure"), "true"),
+		ALPN:       list(q.Get("alpn")),
 	}, nil
 }
 

@@ -24,7 +24,7 @@ func URI(n core.Node) (string, error) {
 		return hysteria2URI(n)
 	case "tuic":
 		return tuicURI(n)
-	case "vless", "trojan", "socks", "http":
+	case "vless", "trojan", "socks", "http", "anytls":
 		return linkURI(n)
 	}
 	return "", fmt.Errorf(i18n.T("不认识的协议 %s"), n.Protocol)
@@ -38,7 +38,7 @@ func linkURI(n core.Node) (string, error) {
 	switch n.Protocol {
 	case "vless":
 		u.User = url.User(n.UUID)
-	case "trojan":
+	case "trojan", "anytls":
 		u.User = url.User(n.Password)
 	default:
 		if n.Username != "" {

@@ -302,11 +302,11 @@ func (a *app) pullSubs(names []string, proxied bool) {
 	if a.subBusy {
 		return
 	}
-	type job struct{ name, url string }
+	type job struct{ name, url, ua string }
 	jobs := make([]job, 0, len(names))
 	for _, name := range names {
 		if item := a.subs.Item(name); item != nil {
-			jobs = append(jobs, job{item.Name, item.URL})
+			jobs = append(jobs, job{item.Name, item.URL, item.UA})
 		}
 	}
 	if len(jobs) == 0 {
@@ -337,10 +337,10 @@ func (a *app) pullSubs(names []string, proxied bool) {
 				defer wg.Done()
 				results[i].name = one.name
 				if proxied {
-					results[i].nodes, results[i].err = sub.FetchProxied(one.url, addr)
+					results[i].nodes, results[i].info, results[i].err = sub.FetchProxied(one.url, addr, one.ua)
 					return
 				}
-				results[i].nodes, results[i].err = sub.Fetch(one.url)
+				results[i].nodes, results[i].info, results[i].err = sub.Fetch(one.url, one.ua)
 			}()
 		}
 		wg.Wait()
@@ -351,6 +351,7 @@ func (a *app) pullSubs(names []string, proxied bool) {
 type subResult struct {
 	name  string
 	nodes []core.Node
+	info  sub.Info
 	err   error
 }
 
@@ -373,6 +374,7 @@ func (a *app) applySubs(results []subResult, proxied bool) {
 		fresh[one.name] = one.nodes
 		if kept := a.subs.Item(one.name); kept != nil {
 			kept.Updated = time.Now()
+			kept.Used, kept.Total, kept.Expire = one.info.Used, one.info.Total, one.info.Expire
 		}
 		if proxied {
 			a.logf(i18n.T("订阅更新（%s，经代理）：%d 个节点"), one.name, len(one.nodes))

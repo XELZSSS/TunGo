@@ -118,7 +118,7 @@ func SecurityOf(n Node) string {
 		return n.TLS
 	}
 	switch n.Protocol {
-	case "trojan", "hysteria2", "tuic":
+	case "trojan", "hysteria2", "tuic", "anytls":
 
 		return "tls"
 	}
@@ -127,7 +127,7 @@ func SecurityOf(n Node) string {
 
 func carriesTLS(protocol string) bool {
 	switch protocol {
-	case "vmess", "vless", "trojan", "hysteria2", "tuic", "http":
+	case "vmess", "vless", "trojan", "hysteria2", "tuic", "http", "anytls":
 		return true
 	}
 	return false
@@ -136,6 +136,14 @@ func carriesTLS(protocol string) bool {
 func carriesTransport(protocol string) bool {
 	switch protocol {
 	case "vmess", "vless", "trojan":
+		return true
+	}
+	return false
+}
+
+func Muxable(protocol string) bool {
+	switch protocol {
+	case "vmess", "vless", "trojan", "shadowsocks":
 		return true
 	}
 	return false

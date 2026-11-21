@@ -16,6 +16,7 @@ type settings struct {
 	Applied   string            `json:"applied,omitempty"`
 	Port      int               `json:"port,omitempty"`
 	Shortcuts map[string]string `json:"shortcuts,omitempty"`
+	RuleBase  string            `json:"ruleBase,omitempty"`
 }
 
 func loadSettings() (settings, error) {

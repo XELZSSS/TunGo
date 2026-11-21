@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -25,6 +26,7 @@ func (a *app) overlays(c *ui.Context) {
 	a.shortcutForm(c)
 	a.portForm(c)
 	a.policyForms(c)
+	a.ruleBaseForm(c)
 	a.updateDialog(c)
 }
 
@@ -68,7 +70,7 @@ func (a *app) nodeForm(c *ui.Context) {
 						})
 					}
 					switch a.draft.Protocol {
-					case "trojan", "hysteria2":
+					case "trojan", "hysteria2", "anytls":
 						ui.TextInput(c, &a.draft.Password).Label(i18n.T("密码")).Password().Grow(1)
 					case "tuic":
 						ui.TextInput(c, &a.draft.Password).Label(i18n.T("密码")).Password().Grow(1)
@@ -92,6 +94,9 @@ func (a *app) nodeForm(c *ui.Context) {
 					if a.draft.Protocol == "tuic" {
 						ui.TextInput(c, &a.draft.Congestion).Label(i18n.T("拥塞控制")).Placeholder("bbr").Grow(1)
 					}
+					if core.Muxable(a.draft.Protocol) {
+						ui.TextInput(c, &a.muxText).Label(i18n.T("Mux 并发（0 关闭）")).Placeholder("8").Width(200)
+					}
 
 					if a.draft.Network != "tcp" {
 						ui.Row(c).Gap(gapBase).Children(func() {
@@ -108,6 +113,10 @@ func (a *app) nodeForm(c *ui.Context) {
 						ui.Row(c).Gap(gapBase).Children(func() {
 							ui.TextInput(c, &a.draft.Fingerprint).Label(i18n.T("指纹")).Placeholder("chrome").Grow(1)
 							ui.Toggle(c, &a.draft.Insecure, i18n.T("跳过证书校验"))
+						})
+						ui.Row(c).Gap(gapBase).Children(func() {
+							ui.Toggle(c, &a.draft.Fragment, i18n.T("TLS 分片（sing-box）"))
+							ui.Toggle(c, &a.draft.RecordFragment, i18n.T("记录分片（sing-box）"))
 						})
 					}
 					if a.draft.TLS == "reality" {
@@ -177,6 +186,11 @@ func (a *app) commit() {
 	} else {
 		a.draft.AlterID = 0
 	}
+	if mux, err := strconv.Atoi(strings.TrimSpace(a.muxText)); err == nil {
+		a.draft.Mux = mux
+	} else {
+		a.draft.Mux = 0
+	}
 	a.draft.ALPN = core.ParseList(a.alpn)
 	a.draft.Detour = a.detourOf()
 	a.draft.Raw = strings.TrimSpace(a.rawText)
@@ -229,8 +243,12 @@ func (a *app) subForm(c *ui.Context) {
 					for i := range a.subs.Items {
 						at := i
 						item := a.subs.Items[i]
+						label := fmt.Sprintf(i18n.T("%s（%s）"), item.Name, intervalName(item.Interval))
+						if traffic := trafficName(item); traffic != "" {
+							label += " · " + traffic
+						}
 						ui.Row(c).Gap(gapBase).AlignItems(ui.Center).Children(func() {
-							ui.Text(c, fmt.Sprintf(i18n.T("%s（%s）"), item.Name, intervalName(item.Interval))).
+							ui.Text(c, label).
 								FontSize(fontS).Grow(1).TextColor(t.Text)
 							if ui.Button(c, i18n.T("使用")).
 								Disabled(a.subs.Running() != nil && a.subs.Running().Name == item.Name).
@@ -276,6 +294,7 @@ func (a *app) subEditForm(c *ui.Context) {
 			ui.TextInput(c, &a.subDraft.Name).Label(i18n.T("名称")).Placeholder(i18n.T("如：机场 A")).Grow(1)
 			ui.TextInput(c, &a.subDraft.URL).Label(i18n.T("订阅地址")).Placeholder("https://…").Grow(1)
 			ui.TextInput(c, &a.subInterval).Label(i18n.T("自动更新间隔（分钟，0 表示不自动更新）")).Width(300)
+			ui.TextInput(c, &a.subDraft.UA).Label(i18n.T("更新时的 User-Agent（留空用 TunGo）")).Placeholder("ClashMetaForAndroid/2.11.1").Grow(1)
 			muted(c, t, i18n.T("更新时只替换这个订阅带来的节点，自己添加的和别的订阅的不动。"))
 			ui.Row(c).Gap(gapBase).Justify(ui.End).Children(func() {
 				if ui.Button(c, i18n.T("取消")).Clicked() {
@@ -311,10 +330,9 @@ func (a *app) commitSub() {
 	if err != nil || interval < 0 {
 		interval = 0
 	}
-	item := sub.Item{Name: name, URL: url, Interval: interval}
-	if at := a.subAt; at >= 0 && at < len(a.subs.Items) {
-		item.Updated = a.subs.Items[at].Updated
-	}
+	item := a.subDraft
+	item.Name, item.URL, item.Interval = name, url, interval
+	item.UA = strings.TrimSpace(item.UA)
 	a.subs.Put(item)
 	a.subs.Current = name
 	a.editingSubItem = false
@@ -367,6 +385,21 @@ func intervalName(minutes int) string {
 		return i18n.T("不自动更新")
 	}
 	return fmt.Sprintf(i18n.T("每 %d 分钟"), minutes)
+}
+
+func trafficName(item sub.Item) string {
+	parts := []string{}
+	if item.Total > 0 {
+		parts = append(parts, fmt.Sprintf(i18n.T("已用 %s / %s"), sizeName(item.Used), sizeName(item.Total)))
+	}
+	if item.Expire > 0 {
+		parts = append(parts, fmt.Sprintf(i18n.T("到期 %s"), time.Unix(item.Expire, 0).Format("2006-01-02")))
+	}
+	return strings.Join(parts, " · ")
+}
+
+func sizeName(bytes int64) string {
+	return fmt.Sprintf("%.1f GB", float64(bytes)/(1<<30))
 }
 
 func (a *app) reveal(path string) {

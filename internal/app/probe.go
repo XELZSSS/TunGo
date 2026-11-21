@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"tungo/internal/core"
@@ -181,4 +182,84 @@ func (a *app) speedLabel(i int) string {
 		return "—"
 	}
 	return fmt.Sprintf("%.1f MB/s", a.speed[i])
+}
+
+var unlockSites = []struct {
+	name string
+	url  string
+}{
+	{"Netflix", "https://www.netflix.com/title/81215567"},
+	{"YouTube Premium", "https://www.youtube.com/premium"},
+	{"Disney+", "https://www.disneyplus.com/"},
+	{"ChatGPT", "https://chatgpt.com/cdn-cgi/trace"},
+	{"Spotify", "https://open.spotify.com/"},
+}
+
+var blockedMarkers = []string{
+	"not available in your region",
+	"not available in your country",
+	"unavailable in your country",
+	"unsupported_country",
+}
+
+func (a *app) checkUnlock() {
+	addr := a.localAddr()
+	if addr == "" {
+		a.hint(i18n.T("先连接再检测"))
+		return
+	}
+	a.event("%s", i18n.T("开始检测流媒体解锁"))
+	client := &http.Client{
+		Timeout:   15 * time.Second,
+		Transport: &http.Transport{DialContext: (&proxy.Upstream{Addr: addr}).DialContext},
+	}
+	go func() {
+		if region, err := exitRegion(client); err == nil {
+			a.update(func() { a.logf(i18n.T("出口地区：%s"), region) })
+		}
+		for _, site := range unlockSites {
+			verdict := probeSite(client, site.url)
+			a.update(func() { a.logf("%s：%s", site.name, verdict) })
+		}
+	}()
+}
+
+func exitRegion(client *http.Client) (string, error) {
+	resp, err := client.Get("https://www.cloudflare.com/cdn-cgi/trace")
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(string(body), "\n") {
+		if region, ok := strings.CutPrefix(line, "loc="); ok {
+			return region, nil
+		}
+	}
+	return "", errors.New(i18n.T("没读到出口地区"))
+}
+
+func probeSite(client *http.Client, url string) string {
+	resp, err := client.Get(url)
+	if err != nil {
+		return i18n.T("连不上")
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return i18n.T("连不上")
+	}
+	lower := strings.ToLower(string(body))
+	for _, marker := range blockedMarkers {
+		if strings.Contains(lower, marker) {
+			return i18n.T("被限制")
+		}
+	}
+	if resp.StatusCode >= 400 {
+		return fmt.Sprint(resp.StatusCode)
+	}
+	return i18n.T("可用")
 }

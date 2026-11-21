@@ -46,6 +46,7 @@ func Run() {
 	core.SetResources(res)
 	mygo.App.OnWindowAllClosed(func() {})
 	mygo.App.OnSecondInstance(func([]string, string) { a.show(); a.sync() })
+	mygo.App.OnOpenURL(a.openLink)
 	mygo.App.WhenReady(a.ready)
 	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { a.quit() })
 	if err := mygo.App.Run(); err != nil {
@@ -108,6 +109,9 @@ func (a *app) ready() {
 	a.win.OnResize(func() { a.update(func() { a.maximized = a.win.IsMaximized() }) })
 	a.setUpTray()
 
+	if err := mygo.App.RegisterURLScheme("tungo"); err != nil {
+		log.Print("no url scheme: ", err)
+	}
 	a.bindShortcuts()
 	a.probe()
 	a.checkApp(true)

@@ -113,6 +113,7 @@ type forms struct {
 	detourName    string
 	rawText       string
 	alterID       string
+	muxText       string
 	alpn          string
 	editingGroup  bool
 	groupWas      core.Node
@@ -150,6 +151,9 @@ type routing struct {
 	dnsSplit         string
 	routeWas         core.Routing
 	dnsWas           core.DNS
+	ruleBase         string
+	editingRuleBase  bool
+	ruleBaseText     string
 }
 
 type link struct {
@@ -168,4 +172,7 @@ type link struct {
 	downRaw     int64
 	upBase      int64
 	downBase    int64
+	sampleUp    int64
+	sampleDown  int64
+	hist        []int64
 }

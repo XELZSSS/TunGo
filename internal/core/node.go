@@ -11,7 +11,7 @@ import (
 
 var Protocols = []string{
 	"direct", "socks", "http", "shadowsocks", "vmess", "vless", "trojan",
-	"hysteria2", "tuic",
+	"hysteria2", "tuic", "anytls",
 }
 
 var Networks = []string{"tcp", "ws", "grpc", "http", "httpupgrade"}
@@ -56,7 +56,10 @@ type Node struct {
 	ObfsPassword string `json:"obfsPassword,omitempty"`
 	Congestion   string `json:"congestion,omitempty"`
 
-	Detour *Node `json:"detour,omitempty"`
+	Mux            int   `json:"mux,omitempty"`
+	Fragment       bool  `json:"fragment,omitempty"`
+	RecordFragment bool  `json:"recordFragment,omitempty"`
+	Detour         *Node `json:"detour,omitempty"`
 
 	Raw string `json:"raw,omitempty"`
 
@@ -130,7 +133,7 @@ func (k Kind) Supports(protocol string) bool {
 	switch protocol {
 	case "direct":
 		return true
-	case "hysteria2", "tuic":
+	case "hysteria2", "tuic", "anytls":
 		return k == SingBox
 	}
 	for _, known := range Protocols {

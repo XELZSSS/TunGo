@@ -65,6 +65,7 @@ func (a *app) applySysProxy() {
 	}
 	a.notice = ""
 	a.logf(i18n.T("系统代理：%s"), proxyName(want))
+	a.syncWinHTTP()
 	a.saveSettings()
 }
 
@@ -77,6 +78,7 @@ func (a *app) clearSysProxy() error {
 		return err
 	}
 	a.applied = ""
+	a.syncWinHTTP()
 	a.saveSettings()
 	return nil
 }
@@ -184,4 +186,23 @@ func (a *app) savePort() {
 	if a.connected() {
 		a.connect()
 	}
+}
+
+func (a *app) syncWinHTTP() {
+	if !admin() {
+		return
+	}
+	if err := sysproxy.MirrorWinHTTP(); err != nil {
+		a.logf(i18n.T("WinHTTP 代理没同步：%s"), err)
+	}
+}
+
+func (a *app) exemptLoopback() {
+	count, err := sysproxy.ExemptLoopback()
+	if err != nil {
+		a.fail(err.Error())
+		a.logf(i18n.T("Store 应用放行：%s"), err)
+		return
+	}
+	a.logf(i18n.T("已放行 %d 个 Store 应用"), count)
 }

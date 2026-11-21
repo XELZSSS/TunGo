@@ -9,8 +9,18 @@ import (
 type Item struct {
 	Name     string    `json:"name"`
 	URL      string    `json:"url"`
+	UA       string    `json:"ua,omitempty"`
 	Interval int       `json:"interval,omitempty"`
 	Updated  time.Time `json:"updated"`
+	Used     int64     `json:"used,omitempty"`
+	Total    int64     `json:"total,omitempty"`
+	Expire   int64     `json:"expire,omitempty"`
+}
+
+type Info struct {
+	Used   int64
+	Total  int64
+	Expire int64
 }
 
 type State struct {

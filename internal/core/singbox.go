@@ -102,6 +102,8 @@ func singBoxOutbound(n Node) (map[string]any, error) {
 		if n.Congestion != "" {
 			out["congestion_control"] = n.Congestion
 		}
+	case "anytls":
+		out["password"] = n.Password
 	}
 	if security := SecurityOf(n); security != "" {
 		if strings.Contains(n.ECH, "://") {
@@ -116,6 +118,9 @@ func singBoxOutbound(n Node) (map[string]any, error) {
 		if transport := singBoxTransport(n); transport != nil {
 			out["transport"] = transport
 		}
+	}
+	if n.Mux > 0 && Muxable(n.Protocol) {
+		out["multiplex"] = map[string]any{"enabled": true, "max_connections": n.Mux}
 	}
 	return out, nil
 }
@@ -140,6 +145,13 @@ func singBoxTLS(n Node) map[string]any {
 	}
 	if n.Pinned != "" {
 		tls["certificate"] = map[string]any{"pinned_sha256": []string{n.Pinned}}
+	}
+	quic := n.Protocol == "hysteria2" || n.Protocol == "tuic"
+	if n.Fragment && !quic {
+		tls["fragment"] = true
+	}
+	if n.RecordFragment && !quic {
+		tls["record_fragment"] = true
 	}
 	if SecurityOf(n) == "reality" {
 		tls["reality"] = map[string]any{

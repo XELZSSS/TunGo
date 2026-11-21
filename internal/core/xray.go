@@ -125,6 +125,9 @@ func xrayOutbound(n Node) (map[string]any, error) {
 			out["streamSettings"] = stream
 		}
 	}
+	if n.Mux > 0 && Muxable(n.Protocol) {
+		out["mux"] = map[string]any{"enabled": true, "concurrency": n.Mux}
+	}
 	return out, nil
 }
 

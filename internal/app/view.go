@@ -401,6 +401,9 @@ func (a *app) statusBar(c *ui.Context, t *ui.Theme) {
 			muted(c, t, a.subNote)
 		}
 		traffic(c, t, a.upRaw-a.upBase, a.downRaw-a.downBase)
+		if spark := sparkline(a.hist); spark != "" {
+			code(c, t, spark)
+		}
 	})
 }
 
@@ -444,4 +447,23 @@ func size(n int64) string {
 	default:
 		return fmt.Sprintf("%.2f GB", float64(n)/(1<<30))
 	}
+}
+
+var sparkBlocks = []rune("▁▂▃▄▅▆▇█")
+
+func sparkline(values []int64) string {
+	peak := int64(0)
+	for _, value := range values {
+		if value > peak {
+			peak = value
+		}
+	}
+	if peak == 0 {
+		return ""
+	}
+	out := make([]rune, 0, len(values))
+	for _, value := range values {
+		out = append(out, sparkBlocks[value*7/peak])
+	}
+	return string(out)
 }

@@ -250,6 +250,7 @@ func (a *app) disconnect() {
 	held := a.detach()
 	a.detachLaunch(held)
 	a.upRaw, a.downRaw, a.upBase, a.downBase = 0, 0, 0, 0
+	a.sampleUp, a.sampleDown, a.hist = 0, 0, nil
 	a.conns = nil
 	if was {
 		a.event("%s", i18n.T("已断开"))
@@ -259,8 +260,6 @@ func (a *app) disconnect() {
 func (a *app) watch(stop <-chan struct{}, local *proxy.Server, kernel *core.Kernel) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
-	var lastUp, lastDown int64
-	lastConns := -1
 	for {
 		var gone <-chan struct{}
 		if kernel != nil {
@@ -307,15 +306,26 @@ func (a *app) watch(stop <-chan struct{}, local *proxy.Server, kernel *core.Kern
 					}
 				}
 			}
-			if up == lastUp && down == lastDown && len(conns) == lastConns {
-				continue
-			}
-			lastUp, lastDown, lastConns = up, down, len(conns)
 			a.update(func() {
 				a.upRaw, a.downRaw = up, down
 				a.conns = conns
+				a.pushTraffic(up, down)
 			})
 		}
+	}
+}
+
+const trafficSpan = 30
+
+func (a *app) pushTraffic(up, down int64) {
+	delta := up + down - a.sampleUp - a.sampleDown
+	a.sampleUp, a.sampleDown = up, down
+	if delta < 0 {
+		delta = 0
+	}
+	a.hist = append(a.hist, delta)
+	if len(a.hist) > trafficSpan {
+		a.hist = a.hist[len(a.hist)-trafficSpan:]
 	}
 }
 
