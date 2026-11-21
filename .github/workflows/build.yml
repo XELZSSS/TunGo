@@ -65,8 +65,22 @@ jobs:
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
         run: go tool mygo build -platform windows/amd64
 
-      - name: Upload update manifest to release
+      - name: Create draft release with manifest
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "v${{ needs.detect.outputs.version }}" build/windows-amd64/update-windows-amd64.json --clobber
+          VERSION: ${{ needs.detect.outputs.version }}
+        run: |
+          $tag = "v$env:VERSION"
+          $existing = gh release view $tag 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag `
+              --target "${{ github.sha }}" `
+              --title $tag `
+              --notes "" `
+              --draft `
+              build/windows-amd64/update-windows-amd64.json
+          } else {
+            gh release upload $tag build/windows-amd64/update-windows-amd64.json --clobber
+          }
+          if ($LASTEXITCODE -ne 0) { exit 1 }
