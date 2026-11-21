@@ -309,8 +309,8 @@ func (a *app) helpMenu(m *ui.Menu) {
 	}
 	if a.releases.installing {
 		label := i18n.T("正在更新应用")
-		if a.releases.progress != "" {
-			label += " " + a.releases.progress
+		if a.releases.whole > 0 {
+			label += fmt.Sprintf(" %d%%", 100*a.releases.part/a.releases.whole)
 		}
 		m.Item(label).Disabled(true)
 	}

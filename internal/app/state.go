@@ -24,7 +24,6 @@ type shell struct {
 	measureCtx context.Context
 	cancelMeas context.CancelFunc
 	quitOnce   sync.Once
-	cleanup    []func()
 	launchMu   sync.Mutex
 	launchKill map[int]func()
 }
@@ -84,7 +83,9 @@ type releases struct {
 	pending    *mygo.Update
 	polling    bool
 	installing bool
-	progress   string
+	dialog     bool
+	part       int64
+	whole      int64
 }
 
 type hotkeys struct {

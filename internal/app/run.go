@@ -47,7 +47,7 @@ func Run() {
 	mygo.App.OnWindowAllClosed(func() {})
 	mygo.App.OnSecondInstance(func([]string, string) { a.show(); a.sync() })
 	mygo.App.WhenReady(a.ready)
-	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { a.quit() })
+	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { a.quit() })
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
 	}

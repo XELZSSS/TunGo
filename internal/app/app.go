@@ -208,13 +208,8 @@ func (a *app) after(fn func()) {
 
 func (a *app) runQueued() {
 	queued := a.queued
-	cleanup := a.cleanup
 	a.queued = nil
-	a.cleanup = nil
 	for _, fn := range queued {
-		fn()
-	}
-	for _, fn := range cleanup {
 		fn()
 	}
 }
