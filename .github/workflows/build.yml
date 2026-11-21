@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - mygo.json
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -27,10 +28,10 @@ jobs:
         shell: pwsh
         run: |
           $current = (Get-Content mygo.json -Raw | ConvertFrom-Json).version
+          $changed = "${{ github.event_name }}" -eq 'workflow_dispatch'
           $before = "${{ github.event.before }}"
-          $changed = $false
           $reachable = $false
-          if ($before -and $before -notmatch '^0+$') {
+          if (-not $changed -and $before -and $before -notmatch '^0+$') {
             git cat-file -e "${before}^{commit}" 2>$null
             $reachable = ($LASTEXITCODE -eq 0)
           }
