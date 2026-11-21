@@ -64,17 +64,24 @@ func Config(kind Kind, n Node, inbound string, policy Policy, clash, secret, tun
 		}
 		inbounds := []any{in}
 		if tun != "" {
-			inbounds = append(inbounds, xrayTun(tun))
+			inbounds = append(inbounds, xrayTun(tun), xrayDNSInbound())
 		}
 		routing, err := xrayRouting(policy.Routing, n)
 		if err != nil {
 			return nil, err
 		}
+		if tun != "" {
+			routing["rules"] = append([]any{
+				map[string]any{"type": "field", "inboundTag": []any{tunTag}, "port": "53", "network": "udp", "outboundTag": "dns-out"},
+				map[string]any{"type": "field", "port": "53", "network": "udp", "outboundTag": "dns-out"},
+			}, routing["rules"].([]any)...)
+		}
 		config = map[string]any{
 			"log":      map[string]any{"loglevel": "warning"},
-			"dns":      xrayDNS(policy.DNS, policy.Routing),
+			"dns":      xrayDNS(policy.DNS, policy.Routing, policy.DNS.Bootstrap),
 			"inbounds": inbounds,
 			"outbounds": append(outbounds,
+				map[string]any{"tag": "dns-out", "protocol": "dns"},
 				map[string]any{"tag": "direct", "protocol": "freedom"},
 				map[string]any{"tag": "block", "protocol": "blackhole"},
 			),

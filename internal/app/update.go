@@ -27,8 +27,10 @@ func (a *app) checkApp(quiet bool) {
 	if !quiet {
 		a.event("%s", i18n.T("正在检查应用更新…"))
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	a.cleanup = append(a.cleanup, cancel)
 	go func() {
-		update, err := mygo.Updater.Check(context.Background())
+		update, err := mygo.Updater.Check(ctx)
 		a.update(func() {
 			a.releases.polling = false
 			switch {
@@ -70,16 +72,26 @@ func (a *app) installApp() {
 	}
 	drain := a.drain
 	a.event(i18n.T("正在下载 %s…"), update.Version)
+	ctx, cancel := context.WithCancel(context.Background())
+	a.cleanup = append(a.cleanup, cancel)
 	go func() {
+		defer cancel()
 		if drain != nil {
-			<-drain
+			select {
+			case <-drain:
+			case <-ctx.Done():
+				return
+			}
 		}
-		err := update.Install(context.Background(), func(part, whole int64) {
+		err := update.Install(ctx, func(part, whole int64) {
 			a.update(func() {
 				a.releases.progress = size(part) + " / " + size(whole)
 			})
 		})
 		a.update(func() {
+			if ctx.Err() != nil {
+				return
+			}
 			a.releases.installing = false
 			a.releases.progress = ""
 			if err != nil {

@@ -43,7 +43,7 @@ func Make() (string, error) {
 	}
 	path := filepath.Join(dir, "tungo-"+time.Now().Format("20060102-150405.000")+".zip")
 	fresh := path + ".tmp"
-	out, err := os.Create(fresh)
+	out, err := os.OpenFile(fresh, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return "", err
 	}
@@ -136,14 +136,16 @@ func Restore(path string) ([]string, error) {
 		return nil, err
 	}
 	var entries []*zip.File
+	seen := map[string]bool{}
 	for _, entry := range z.File {
 		name := filepath.Base(entry.Name)
-		if !known(name) {
+		if !known(name) || seen[name] {
 			continue
 		}
 		if entry.UncompressedSize64 > maxEntry {
 			return nil, fmt.Errorf(i18n.T("%s 太大，不是备份里的文件"), name)
 		}
+		seen[name] = true
 		entries = append(entries, entry)
 	}
 	if len(entries) == 0 {
@@ -186,20 +188,52 @@ func Restore(path string) ([]string, error) {
 			return nil, err
 		}
 	}
+	originals := map[string]string{}
+	staged := make([]string, 0, len(restored))
+	for _, name := range restored {
+		original := filepath.Join(data, name)
+		if _, err := os.Stat(original); err != nil {
+			continue
+		}
+		saved := original + ".backup"
+		os.Remove(saved)
+		if err := os.Rename(original, saved); err != nil {
+			rollback(staged, restored, originals)
+			return nil, err
+		}
+		originals[name] = saved
+		staged = append(staged, name)
+	}
 	renamed := 0
 	for _, name := range restored {
 		if err := os.Rename(fresh(name), filepath.Join(data, name)); err != nil {
-			for _, done := range restored[:renamed] {
-				os.Rename(filepath.Join(data, done), fresh(done))
-			}
-			for _, pending := range restored[renamed:] {
-				os.Remove(fresh(pending))
-			}
+			rollback(restored, restored[renamed:], originals)
 			return nil, err
 		}
 		renamed++
 	}
+	for _, saved := range originals {
+		os.Remove(saved)
+	}
 	return restored, nil
+}
+
+func appData() string {
+	dir, _ := appdir.Dir()
+	return dir
+}
+
+func rollback(restored, pending []string, originals map[string]string) {
+	for _, name := range restored {
+		current := filepath.Join(appData(), name)
+		os.Remove(current)
+		if saved := originals[name]; saved != "" {
+			os.Rename(saved, current)
+		}
+	}
+	for _, name := range pending {
+		os.Remove(filepath.Join(appData(), name+".restore"))
+	}
 }
 
 func known(name string) bool {

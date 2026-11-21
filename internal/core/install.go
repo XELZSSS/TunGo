@@ -370,7 +370,7 @@ func unzip(path, kind, target string) error {
 	}
 	defer reader.Close()
 	for _, file := range reader.File {
-		if base(file.Name) != kind {
+		if !strings.EqualFold(base(file.Name), kind) {
 			continue
 		}
 		in, err := file.Open()
@@ -403,7 +403,7 @@ func untar(path, kind, target string) error {
 		if err != nil {
 			return err
 		}
-		if base(header.Name) != kind {
+		if !strings.EqualFold(base(header.Name), kind) {
 			continue
 		}
 		return write(reader, target)

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -50,7 +51,7 @@ func (s *Server) http(conn net.Conn, br *bufio.Reader) {
 }
 
 func (s *Server) connect(conn net.Conn, br *bufio.Reader, host string) {
-	target, err := s.dialContext(withPort(host, "443"))
+	target, err := s.dialContext(connectPort(host))
 	if err != nil {
 		fmt.Fprint(conn, "HTTP/1.1 502 Bad Gateway\r\n\r\n")
 		conn.Close()
@@ -79,9 +80,22 @@ func hopByHop(header http.Header) {
 	}
 }
 
-func withPort(host, port string) string {
+func withPort(host, defaultPort string) string {
 	if h, p, err := net.SplitHostPort(host); err == nil {
 		return net.JoinHostPort(h, p)
 	}
-	return net.JoinHostPort(strings.Trim(host, "[]"), port)
+	h := strings.Trim(host, "[]")
+	if n, err := strconv.Atoi(defaultPort); err == nil && n > 0 {
+		return net.JoinHostPort(h, defaultPort)
+	}
+	return net.JoinHostPort(h, "80")
+}
+
+func connectPort(host string) string {
+	if _, port, err := net.SplitHostPort(host); err == nil && port != "" {
+		if n, err := strconv.Atoi(port); err == nil && n > 0 {
+			return host
+		}
+	}
+	return net.JoinHostPort(strings.Trim(host, "[]"), "443")
 }

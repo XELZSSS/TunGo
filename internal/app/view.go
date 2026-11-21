@@ -316,7 +316,7 @@ func (a *app) copyLogs(c *ui.Context) {
 
 func (a *app) clearLogs() {
 	a.logs = nil
-	a.say(i18n.T("日志已清空"))
+	a.say(i18n.T("面板日志已清空"))
 }
 
 func (a *app) toolBar(c *ui.Context, t *ui.Theme) {

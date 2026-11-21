@@ -2,7 +2,7 @@ package core
 
 import "strings"
 
-var Routings = []string{"绕过大陆", "黑名单", "全局"}
+var Routings = []string{"绕过大陆", "黑名单", "全局", "去广告"}
 
 func DefaultRouting() Routing { return PresetRouting(Routings[0]) }
 
@@ -14,13 +14,20 @@ func PresetRouting(name string) Routing {
 		routing.Final = "direct"
 	case "绕过大陆":
 		routing.Rules = mainlandRules()
+	case "去广告":
+		routing.Rules = adblockRules()
 	}
 	return routing
 }
 
+func adblockRules() []Rule {
+	return append([]Rule{
+		{Remark: "拦截广告", Out: "block", Domain: []string{"geosite:adblock", "geosite:category-ads-all"}},
+	}, baseRules()...)
+}
+
 func baseRules() []Rule {
 	return []Rule{
-		{Remark: "拦截广告", Out: "block", Domain: []string{"geosite:adblock", "geosite:category-ads-all"}},
 		{Remark: "阻断 UDP 443", Out: "block", Port: "443", Network: "udp"},
 		{Remark: "绕过局域网地址", Out: "direct", IP: []string{"geoip:private"}},
 		{Remark: "绕过局域网域名", Out: "direct", Domain: []string{"geosite:private"}},
@@ -40,7 +47,6 @@ func mainlandRules() []Rule {
 
 func blackRules() []Rule {
 	return []Rule{
-		{Remark: "拦截广告", Out: "block", Domain: []string{"geosite:adblock", "geosite:category-ads-all"}},
 		{Remark: "绕过 bittorrent", Out: "direct", Protocol: []string{"bittorrent"}},
 		{Remark: "代理 api.ip.sb", Out: "proxy", Domain: []string{"domain:api.ip.sb"}},
 		{Remark: "阻断 UDP 443", Out: "block", Port: "443", Network: "udp"},
@@ -134,6 +140,10 @@ func GeoEntries(routing Routing) []string {
 func MissingRuleSets(routing Routing, kind Kind) []string {
 	var out []string
 	for _, entry := range GeoEntries(routing) {
+		k, tag := geoKindTag(entry)
+		if k == "geoip" && tag == "private" {
+			continue
+		}
 		if !have(entry, kind) {
 			out = append(out, entry)
 		}

@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"tungo/internal/i18n"
 )
@@ -26,18 +27,23 @@ func ruleSetURL(kind, tag string) string {
 
 func have(entry string, kind Kind) bool {
 	k, tag := geoKindTag(entry)
-	name := k + "-" + tag + ".srs"
-	if kind == Xray {
-		if k == "geoip" {
-			name = k + "-" + tag + ".cidrs.txt"
-		} else {
-			name = k + "-" + tag + ".domains.txt"
-		}
+	if ruleSetPath(k+"-"+tag+".srs") != "" {
+		return true
 	}
-	return ruleSetPath(name) != ""
+	if kind != Xray {
+		return false
+	}
+	if k == "geoip" {
+		return ruleSetPath(k+"-"+tag+".cidrs.txt") != ""
+	}
+	return ruleSetPath(k+"-"+tag+".domains.txt") != ""
 }
 
+var ruleSetMu sync.Mutex
+
 func EnsureRuleSet(entry string, kind Kind) error {
+	ruleSetMu.Lock()
+	defer ruleSetMu.Unlock()
 	k, tag := geoKindTag(entry)
 	dir := ruleSetDir()
 	if dir == "" {
@@ -103,14 +109,20 @@ func decompile(srs, prefix string) error {
 	if err != nil {
 		return errors.New(i18n.T("准备 xray 规则集需要 sing-box 程序，请先安装 sing-box"))
 	}
-	dump := prefix + ".json"
-	defer os.Remove(dump)
-	cmd := exec.Command(binary, "rule-set", "decompile", "-o", dump, srs)
+	dump, err := os.CreateTemp(filepath.Dir(prefix), filepath.Base(prefix)+"-*.json")
+	if err != nil {
+		return err
+	}
+	path := dump.Name()
+	dump.Close()
+	os.Remove(path)
+	defer os.Remove(path)
+	cmd := exec.Command(binary, "rule-set", "decompile", "-o", path, srs)
 	prepare(cmd)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("rule-set decompile: %w: %s", err, out)
 	}
-	data, err := os.ReadFile(dump)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}

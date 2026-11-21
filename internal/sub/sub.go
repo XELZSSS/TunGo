@@ -60,10 +60,14 @@ func fetch(from string, client *http.Client) ([]core.Node, error) {
 func Parse(data []byte) ([]core.Node, error) {
 	text := strings.TrimSpace(strings.TrimPrefix(string(data), "\ufeff"))
 	nodes, found, err := parseConfig(text)
-	if !found && !strings.Contains(text, "://") {
+	if !found {
 		if decoded, ok := decode(text); ok {
-			text = decoded
-			nodes, found, err = parseConfig(text)
+			if decodedNodes, decodedFound, decodedErr := parseConfig(decoded); decodedFound {
+				nodes, found, err = decodedNodes, true, decodedErr
+				text = decoded
+			} else if strings.Contains(text, "://") {
+				text = decoded
+			}
 		}
 	}
 	if found {
@@ -152,19 +156,24 @@ func vmess(link string) (core.Node, error) {
 		return core.Node{}, errors.New(i18n.T("vmess: 不是 base64"))
 	}
 	var v struct {
-		PS   string          `json:"ps"`
-		Add  string          `json:"add"`
-		Port json.RawMessage `json:"port"`
-		ID   string          `json:"id"`
-		Aid  json.RawMessage `json:"aid"`
-		Scy  string          `json:"scy"`
-		Net  string          `json:"net"`
-		Path string          `json:"path"`
-		Host string          `json:"host"`
-		TLS  string          `json:"tls"`
-		SNI  string          `json:"sni"`
-		ALPN string          `json:"alpn"`
-		FP   string          `json:"fp"`
+		PS       string          `json:"ps"`
+		Add      string          `json:"add"`
+		Port     json.RawMessage `json:"port"`
+		ID       string          `json:"id"`
+		Aid      json.RawMessage `json:"aid"`
+		Scy      string          `json:"scy"`
+		Net      string          `json:"net"`
+		Path     string          `json:"path"`
+		Host     string          `json:"host"`
+		TLS      string          `json:"tls"`
+		SNI      string          `json:"sni"`
+		ALPN     string          `json:"alpn"`
+		FP       string          `json:"fp"`
+		ECH      string          `json:"ech"`
+		Pcs      string          `json:"pcs"`
+		Pbk      string          `json:"pbk"`
+		Sid      string          `json:"sid"`
+		Insecure string          `json:"allowInsecure"`
 	}
 	if err := json.Unmarshal([]byte(body), &v); err != nil {
 		return core.Node{}, err
@@ -201,6 +210,11 @@ func vmess(link string) (core.Node, error) {
 		ServerName:  v.SNI,
 		ALPN:        list(v.ALPN),
 		Fingerprint: v.FP,
+		ECH:         v.ECH,
+		Pinned:      v.Pcs,
+		PublicKey:   v.Pbk,
+		ShortID:     v.Sid,
+		Insecure:    v.Insecure == "1" || strings.EqualFold(v.Insecure, "true"),
 	}, nil
 }
 
@@ -311,7 +325,7 @@ func hysteria2(link string) (core.Node, error) {
 		Password:     u.User.Username(),
 		TLS:          "tls",
 		ServerName:   first(q.Get("sni"), q.Get("peer")),
-		Insecure:     q.Get("insecure") == "1",
+		Insecure:     q.Get("insecure") == "1" || strings.EqualFold(q.Get("insecure"), "true"),
 		ALPN:         list(q.Get("alpn")),
 		Obfs:         q.Get("obfs"),
 		ObfsPassword: q.Get("obfs-password"),
@@ -609,6 +623,8 @@ func clashNode(one map[string]any) (core.Node, error) {
 		ALPN:        values(one, "alpn"),
 		Fingerprint: first(field(one, "client-fingerprint"), field(one, "fingerprint")),
 		Insecure:    flag(one, "skip-cert-verify"),
+		ECH:         first(field(one, "ech-opts"), field(one, "ech")),
+		Pinned:      field(one, "pinned-peer-cert-sha256"),
 	}
 	switch protocol {
 	case "vmess":
@@ -717,6 +733,8 @@ func singBoxNode(one map[string]any) (core.Node, error) {
 		node.Insecure = flag(tls, "insecure")
 		node.ALPN = values(tls, "alpn")
 		node.Fingerprint = field(obj(tls, "utls"), "fingerprint")
+		node.ECH = echConfig(tls["ech"])
+		node.Pinned = pinnedHash(tls["certificate"])
 		if reality := obj(tls, "reality"); flag(reality, "enabled") {
 			node.TLS = "reality"
 			node.PublicKey = field(reality, "public_key")
@@ -734,6 +752,31 @@ func singBoxNode(one map[string]any) (core.Node, error) {
 		node.Host = first(values(transport, "host")...)
 	}
 	return node, nil
+}
+
+func echConfig(value any) string {
+	switch one := value.(type) {
+	case string:
+		return one
+	case map[string]any:
+		return field(one, "config")
+	case []any:
+		if len(one) > 0 {
+			return echConfig(one[0])
+		}
+	}
+	return ""
+}
+
+func pinnedHash(value any) string {
+	certificate, ok := value.(map[string]any)
+	if !ok {
+		return ""
+	}
+	if hashes := values(certificate, "pinned_sha256"); len(hashes) > 0 {
+		return hashes[0]
+	}
+	return ""
 }
 
 func field(one map[string]any, key string) string {

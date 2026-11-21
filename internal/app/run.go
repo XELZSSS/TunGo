@@ -128,15 +128,27 @@ func (a *app) show() {
 	a.win.Focus()
 }
 
-func (a *app) quit() {
-	a.tries++
-	a.busy = false
-	a.quitting = true
-	a.cancelMeas()
-	if err := a.clearSysProxy(); err != nil {
-		log.Print(err)
+func (a *app) requestQuit() {
+	if a.quitting {
+		return
 	}
-	a.detach().close()
+	a.quit()
+	mygo.App.Quit()
+}
+
+func (a *app) quit() {
+	a.quitOnce.Do(func() {
+		a.tries++
+		a.busy = false
+		a.quitting = true
+		a.killLaunches()
+		a.cancelMeas()
+		if err := a.clearSysProxy(); err != nil {
+			log.Print(err)
+		}
+		a.update(func() { a.runQueued() })
+		a.detach().close()
+	})
 }
 
 func (a *app) setUpTray() {
@@ -219,8 +231,7 @@ func (a *app) refreshTray() {
 		{Label: i18n.T("打开日志目录"), Click: func(*mygo.MenuItem, *mygo.Window) { a.openLogs() }},
 		mygo.Separator(),
 		{Label: i18n.T("退出 TunGo"), Click: func(*mygo.MenuItem, *mygo.Window) {
-			a.quitting = true
-			mygo.App.Quit()
+			a.requestQuit()
 		}},
 	}))
 	a.tray.SetToolTip("TunGo — " + a.status())

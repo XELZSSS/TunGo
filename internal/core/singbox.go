@@ -127,6 +127,9 @@ func singBoxTLS(n Node) map[string]any {
 	if fingerprint != "" {
 		tls["utls"] = map[string]any{"enabled": true, "fingerprint": fingerprint}
 	}
+	if n.Pinned != "" {
+		tls["certificate"] = map[string]any{"pinned_sha256": []string{n.Pinned}}
+	}
 	if SecurityOf(n) == "reality" {
 		tls["reality"] = map[string]any{
 			"enabled":    true,
@@ -236,6 +239,9 @@ func singBoxRoute(routing Routing) (map[string]any, error) {
 	set := func(entry string) (tag string, domains, cidrs []string, err error) {
 		kind, name := geoKindTag(entry)
 		tag = kind + "-" + name
+		if kind == "geoip" && name == "private" {
+			return "", nil, nil, nil
+		}
 		if seen[tag] {
 			return tag, nil, nil, nil
 		}

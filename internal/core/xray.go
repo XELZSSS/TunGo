@@ -29,6 +29,16 @@ func xrayInbound(inbound string) (map[string]any, error) {
 	}, nil
 }
 
+func xrayDNSInbound() map[string]any {
+	return map[string]any{
+		"tag":      "dns-in",
+		"listen":   "127.0.0.1",
+		"port":     1053,
+		"protocol": "dokodemo-door",
+		"settings": map[string]any{"address": "8.8.8.8", "port": 53, "network": "tcp,udp"},
+	}
+}
+
 func xrayTun(name string) map[string]any {
 	return map[string]any{
 		"tag":      tunTag,
@@ -117,6 +127,9 @@ func xrayStream(n Node) map[string]any {
 		if alpn := alpnOf(n); len(alpn) > 0 {
 			tls["alpn"] = alpn
 		}
+		if n.Insecure {
+			tls["allowInsecure"] = true
+		}
 		if n.ECH != "" && !strings.Contains(n.ECH, "://") {
 			tls["echConfigList"] = n.ECH
 		}
@@ -143,6 +156,11 @@ func xrayStream(n Node) map[string]any {
 	switch n.Network {
 	case "ws":
 		ws := map[string]any{"path": wsPath(n)}
+		if path, early := earlyData(wsPath(n)); early > 0 {
+			ws["path"] = path
+			ws["maxEarlyData"] = early
+			ws["earlyDataHeaderName"] = "Sec-WebSocket-Protocol"
+		}
 		if n.Host != "" {
 			ws["headers"] = map[string]any{"Host": n.Host}
 		}
@@ -162,8 +180,14 @@ func xrayStream(n Node) map[string]any {
 	return stream
 }
 
-func xrayDNS(dns DNS, routing Routing) map[string]any {
+func xrayDNS(dns DNS, routing Routing, bootstrap string) map[string]any {
 	servers := []any{}
+	if bootstrap != "" {
+		_, host, _ := splitDNS(bootstrap)
+		if net.ParseIP(host) != nil {
+			servers = append(servers, map[string]any{"address": host, "domains": []any{"dns.google", "cloudflare-dns.com", "doh.pub"}, "skipFallback": true})
+		}
+	}
 	if values := suffixDomains(directSuffixes(routing)); len(values) > 0 {
 		servers = append(servers, map[string]any{
 			"address": dns.Direct, "domains": values, "skipFallback": true,
@@ -298,7 +322,7 @@ func xrayRouting(routing Routing, n Node) (map[string]any, error) {
 	}
 	route := map[string]any{"domainStrategy": strategy, "rules": rules}
 	if balancer != "" {
-		route["balancers"] = []any{xrayBalancer(n.StrategyOr())}
+		route["balancers"] = []any{xrayBalancer(n.StrategyOr(), n)}
 	}
 	return route, nil
 }

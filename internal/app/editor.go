@@ -396,6 +396,5 @@ func (a *app) rebootAsAdmin() {
 		return
 	}
 	a.logf("%s", i18n.T("已请求以管理员身份重启"))
-	a.quitting = true
-	mygo.App.Quit()
+	a.requestQuit()
 }

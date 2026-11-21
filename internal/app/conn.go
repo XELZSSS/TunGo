@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"tungo/internal/core"
@@ -64,7 +65,7 @@ func (a *app) connect() {
 			a.logf(i18n.T("已忽略缺失的规则集：%s"), strings.Join(missing, ", "))
 		}
 		a.know(kind)
-		if kind == core.SingBox && node.NeedsPin() {
+		if kind == core.SingBox && (node.NeedsPin() || node.SkipsVerify()) {
 			a.logf(i18n.T("sing-box 不支持证书 pin，已忽略：%s"), node.Name)
 		}
 	}
@@ -86,6 +87,12 @@ func (a *app) launch(wait <-chan struct{}, prev running, kind core.Kind, node co
 	prev.close()
 
 	var kernel *core.Kernel
+	var local *proxy.Server
+	killOnce := sync.Once{}
+	kill := func() { killOnce.Do(func() { a.finishLaunch(kernel, local) }) }
+	a.registerLaunch(ticket, kill)
+	defer a.dropLaunch(ticket)
+
 	if !node.Direct() {
 		socks, err := kernelInbound()
 		if err != nil {
@@ -111,7 +118,7 @@ func (a *app) launch(wait <-chan struct{}, prev running, kind core.Kind, node co
 		}
 		kernel = started
 	}
-	var local *proxy.Server
+
 	note := ""
 	if !tun {
 		var dialer proxy.Dialer = &net.Dialer{Timeout: 10 * time.Second}
@@ -125,6 +132,7 @@ func (a *app) launch(wait <-chan struct{}, prev running, kind core.Kind, node co
 			}
 		}
 		if err != nil {
+			kill()
 			if kernel != nil {
 				kernel.Stop()
 			}
@@ -139,12 +147,7 @@ func (a *app) launch(wait <-chan struct{}, prev running, kind core.Kind, node co
 	}
 	a.update(func() {
 		if ticket != a.tries {
-			if local != nil {
-				local.Close()
-			}
-			if kernel != nil {
-				kernel.Stop()
-			}
+			kill()
 			return
 		}
 		a.busy = false
@@ -152,9 +155,6 @@ func (a *app) launch(wait <-chan struct{}, prev running, kind core.Kind, node co
 		a.local = local
 		a.stop = make(chan struct{})
 		a.notice = ""
-		if kind == core.Xray && node.SkipsVerify() {
-			a.hint(fmt.Sprintf(i18n.T("xray 不支持跳过证书校验，这个节点多半连不上：%s"), node.Name))
-		}
 		if note != "" {
 			a.logf("%s", note)
 		}
@@ -179,6 +179,8 @@ type running struct {
 	stop   chan struct{}
 }
 
+func (r running) empty() bool { return r.local == nil && r.kernel == nil && r.stop == nil }
+
 func (r running) close() {
 	if r.stop != nil {
 		close(r.stop)
@@ -197,6 +199,55 @@ func (a *app) detach() running {
 	return held
 }
 
+func (a *app) detachLaunch(held running) {
+	if held.empty() {
+		return
+	}
+	wait := a.drain
+	done := make(chan struct{})
+	a.drain = done
+	go func() {
+		if wait != nil {
+			<-wait
+		}
+		held.close()
+		close(done)
+	}()
+}
+
+func (a *app) finishLaunch(kernel *core.Kernel, local *proxy.Server) {
+	a.detachLaunch(running{kernel: kernel, local: local})
+}
+
+func (a *app) killLaunches() {
+	a.launchMu.Lock()
+	kills := a.launchKill
+	a.launchKill = map[int]func(){}
+	a.launchMu.Unlock()
+	for _, kill := range kills {
+		kill()
+	}
+}
+
+func (a *app) registerLaunch(ticket int, kill func()) {
+	a.launchMu.Lock()
+	old := a.launchKill[ticket]
+	if a.launchKill == nil {
+		a.launchKill = map[int]func(){}
+	}
+	a.launchKill[ticket] = kill
+	a.launchMu.Unlock()
+	if old != nil {
+		old()
+	}
+}
+
+func (a *app) dropLaunch(ticket int) {
+	a.launchMu.Lock()
+	delete(a.launchKill, ticket)
+	a.launchMu.Unlock()
+}
+
 func (a *app) restartMeasures() {
 	a.cancelMeas()
 	a.measureCtx, a.cancelMeas = context.WithCancel(context.Background())
@@ -204,6 +255,7 @@ func (a *app) restartMeasures() {
 
 func (a *app) disconnect() {
 	was := a.connected()
+	a.killLaunches()
 	a.restartMeasures()
 	a.tries++
 	a.busy = false
@@ -212,18 +264,7 @@ func (a *app) disconnect() {
 		a.logf(i18n.T("系统代理：%s"), err)
 	}
 	held := a.detach()
-	if held.local != nil || held.kernel != nil || held.stop != nil {
-		wait := a.drain
-		done := make(chan struct{})
-		a.drain = done
-		go func() {
-			if wait != nil {
-				<-wait
-			}
-			held.close()
-			close(done)
-		}()
-	}
+	a.detachLaunch(held)
 	a.upRaw, a.downRaw, a.upBase, a.downBase = 0, 0, 0, 0
 	a.conns = nil
 	if was {
@@ -241,6 +282,10 @@ func (a *app) watch(stop <-chan struct{}, local *proxy.Server, kernel *core.Kern
 		if kernel != nil {
 			gone = kernel.Done()
 		}
+		var localDone <-chan struct{}
+		if local != nil {
+			localDone = local.Done()
+		}
 		select {
 		case <-stop:
 			return
@@ -252,6 +297,15 @@ func (a *app) watch(stop <-chan struct{}, local *proxy.Server, kernel *core.Kern
 				a.disconnect()
 				a.fail(i18n.T("内核已退出，连接已断开"))
 				a.event(i18n.T("内核已退出：%s"), kernel.Output())
+			})
+			return
+		case <-localDone:
+			a.update(func() {
+				if a.local != local {
+					return
+				}
+				a.disconnect()
+				a.fail(i18n.T("本地代理已停止，连接已断开"))
 			})
 			return
 		case <-ticker.C:

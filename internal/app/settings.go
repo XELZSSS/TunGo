@@ -24,7 +24,8 @@ func loadSettings() (settings, error) {
 		return out, err
 	}
 	if out.Version > settingsVersion {
-		out = settings{Version: settingsVersion, Skipped: map[string]string{}}
+		shortcuts, skipped := out.Shortcuts, out.Skipped
+		out = settings{Version: settingsVersion, Skipped: skipped, Shortcuts: shortcuts}
 	}
 	if out.Skipped == nil {
 		out.Skipped = map[string]string{}

@@ -1,11 +1,12 @@
 package core
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 )
 
 func geoKindTag(entry string) (kind, tag string) {
@@ -43,25 +44,26 @@ func ruleSetDir() string {
 }
 
 type fileList struct {
-	at    time.Time
-	size  int64
-	lines []string
+	digest string
+	lines  []string
 }
 
 var lists sync.Map
 
 func cachedList(path string, parse func([]string) []string) []string {
-	info, err := os.Stat(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil
 	}
+	sum := sha256.Sum256(data)
+	digest := hex.EncodeToString(sum[:])
 	if one, ok := lists.Load(path); ok {
-		if kept := one.(fileList); kept.at.Equal(info.ModTime()) && kept.size == info.Size() {
+		if kept := one.(fileList); kept.digest == digest {
 			return kept.lines
 		}
 	}
-	lines := parse(rawLines(path))
-	lists.Store(path, fileList{at: info.ModTime(), size: info.Size(), lines: lines})
+	lines := parse(strings.Split(string(data), "\n"))
+	lists.Store(path, fileList{digest: digest, lines: lines})
 	return lines
 }
 

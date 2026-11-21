@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"net/http"
+	"sync"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -22,6 +23,10 @@ type shell struct {
 	queued     []func()
 	measureCtx context.Context
 	cancelMeas context.CancelFunc
+	quitOnce   sync.Once
+	cleanup    []func()
+	launchMu   sync.Mutex
+	launchKill map[int]func()
 }
 
 type lists struct {

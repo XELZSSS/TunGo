@@ -278,8 +278,7 @@ func (a *app) settingsMenu(c *ui.Context, m *ui.Menu) {
 	}
 	m.Separator()
 	if m.Item(i18n.T("退出 TunGo")).Chosen() {
-		a.quitting = true
-		mygo.App.Quit()
+		a.requestQuit()
 	}
 }
 
@@ -288,7 +287,7 @@ func (a *app) kernelMenu(_ *ui.Context, m *ui.Menu) {
 		name := string(kind)
 		label := name
 		if kind == core.Auto {
-			label = i18n.T("自动（按协议）")
+			label = i18n.T("自动（默认 sing-box）")
 		}
 		if m.Item(label).Radio(a.kind == name).Disabled(a.connected()).Chosen() {
 			a.kind = name

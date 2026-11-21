@@ -8,7 +8,7 @@
 - 测 TCP 延迟、真连接延迟和下载速度，可按延迟排序
 - 策略组按最低延迟、故障转移、随机、轮询、最低负载自动选节点
 - 系统代理、PAC、TUN 三种接管方式，TUN 要管理员权限
-- sing-box 与 xray 双内核，按协议自动切换，也可手动指定
+- sing-box 与 xray 双内核，默认 sing-box，可手动切换
 - 路由与 DNS 可改，按域名、IP、端口、网络、协议分流，规则集随包附带
 - 内置规则集拦截广告与追踪域名
 
@@ -66,7 +66,7 @@ TunGo/
 go tool mygo build -platform windows/amd64
 ```
 
-产物在 `build\windows-amd64\`，含 `TunGo.exe` 与安装包 `tungo-setup-<version>-amd64.exe`，内核与规则集随包分发在 `resources\bin\`
+产物在 `build\windows-amd64\`，包含 `TunGo.exe`、安装包和随包分发的资源
 
 目前只提供 Windows 版本，macOS 与 Linux 请自行构建测试
 

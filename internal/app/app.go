@@ -46,6 +46,7 @@ func newApp() *app {
 		servers: servers{kind: string(core.Auto)},
 		link:    link{proxy: string(sysproxy.ModeSet), proxyOn: string(sysproxy.ModeSet)},
 	}
+	a.launchKill = map[int]func(){}
 	a.measureCtx, a.cancelMeas = context.WithCancel(context.Background())
 	a.list.Selected = &a.row
 	a.rowAt = -1
@@ -207,11 +208,13 @@ func (a *app) after(fn func()) {
 
 func (a *app) runQueued() {
 	queued := a.queued
-	if len(queued) == 0 {
-		return
-	}
+	cleanup := a.cleanup
 	a.queued = nil
+	a.cleanup = nil
 	for _, fn := range queued {
+		fn()
+	}
+	for _, fn := range cleanup {
 		fn()
 	}
 }

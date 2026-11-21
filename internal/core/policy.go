@@ -222,6 +222,11 @@ func LoadRoutingSet() (RoutingSet, error) {
 	if set.Item(set.Current) == nil {
 		set.Current = set.Items[0].Name
 	}
+	for _, name := range Routings {
+		if set.Item(name) == nil {
+			set.Items = append(set.Items, RoutingItem{Name: name, Routing: PresetRouting(name)})
+		}
+	}
 	return set, err
 }
 

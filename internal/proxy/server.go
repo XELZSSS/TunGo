@@ -24,6 +24,7 @@ type Server struct {
 
 	ctx    context.Context
 	cancel context.CancelFunc
+	done   chan struct{}
 
 	up, down atomic.Int64
 
@@ -38,12 +39,14 @@ func Listen(addr string, dial Dialer) (*Server, error) {
 		return nil, err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	s := &Server{ln: ln, dial: dial, ctx: ctx, cancel: cancel, conns: map[net.Conn]struct{}{}}
+	s := &Server{ln: ln, dial: dial, ctx: ctx, cancel: cancel, done: make(chan struct{}), conns: map[net.Conn]struct{}{}}
 	go s.serve()
 	return s, nil
 }
 
 func (s *Server) Addr() string { return s.ln.Addr().String() }
+
+func (s *Server) Done() <-chan struct{} { return s.done }
 
 func (s *Server) Stats() (up, down int64) { return s.up.Load(), s.down.Load() }
 
@@ -64,6 +67,7 @@ func (s *Server) Close() error {
 }
 
 func (s *Server) serve() {
+	defer close(s.done)
 	fails := 0
 	for {
 		conn, err := s.ln.Accept()
@@ -77,6 +81,8 @@ func (s *Server) serve() {
 			}
 			fails++
 			if fails > 100 {
+				s.cancel()
+				s.ln.Close()
 				return
 			}
 			time.Sleep(50 * time.Millisecond)

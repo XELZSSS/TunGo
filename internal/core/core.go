@@ -29,17 +29,18 @@ const (
 var Choices = []Kind{Auto, SingBox, Xray}
 
 func PickKind(kind Kind) Kind {
-	if kind == Auto {
+	switch kind {
+	case SingBox, Xray:
+		return kind
+	default:
 		return SingBox
 	}
-	return kind
 }
 
 func Carries(kind Kind, n Node) bool {
 	if n.Direct() {
 		return true
 	}
-
 	if n.Group() {
 		for _, member := range n.Members {
 			if !Carries(kind, member) {
@@ -51,8 +52,8 @@ func Carries(kind Kind, n Node) bool {
 	if !kind.Supports(n.Protocol) {
 		return false
 	}
-	if n.Detour != nil && !n.Detour.Direct() {
-		return kind.Supports(n.Detour.Protocol)
+	if n.Detour != nil && !Carries(kind, *n.Detour) {
+		return false
 	}
 	return true
 }

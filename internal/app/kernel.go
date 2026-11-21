@@ -41,10 +41,11 @@ func (a *app) know(kind core.Kind) {
 	a.versionFor = kind
 	a.version = ""
 	a.latest = ""
+	tag := a.tries
 	go func() {
 		version := core.Version(kind)
 		a.update(func() {
-			if a.versionFor != kind {
+			if a.versionFor != kind || tag != a.tries {
 				return
 			}
 			a.version = version

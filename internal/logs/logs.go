@@ -18,12 +18,12 @@ const (
 )
 
 var (
-	mu       sync.Mutex
-	dir      string
-	file     *os.File
-	day      string
-	size     int64
-	reported bool
+	mu      sync.Mutex
+	dir     string
+	file    *os.File
+	day     string
+	size    int64
+	lastErr string
 )
 
 func Setup(into string) error {
@@ -122,10 +122,11 @@ func openFile(path string, flag int) error {
 }
 
 func report(err error) {
-	if reported {
+	message := err.Error()
+	if message == lastErr {
 		return
 	}
-	reported = true
+	lastErr = message
 	fmt.Fprintln(os.Stderr, "tungo: log:", err)
 }
 

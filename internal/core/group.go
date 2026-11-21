@@ -8,39 +8,25 @@ func singBoxOutbounds(n Node) ([]any, error) {
 	if n.Group() {
 		return singBoxGroup(n)
 	}
-	outbound, err := singBoxOutbound(n)
-	if err != nil {
-		return nil, err
-	}
-	outbounds := []any{outbound}
-
-	if n.Detour != nil && !n.Detour.Direct() {
-		detour, err := singBoxOutbound(*n.Detour)
-		if err != nil {
-			return nil, err
-		}
-		detour["tag"] = detourTag
-		outbound["detour"] = detourTag
-		outbounds = append(outbounds, detour)
-	}
-	return outbounds, nil
+	return nodeOutbounds(n, singBoxOutbound)
 }
 
 func singBoxGroup(n Node) ([]any, error) {
 	members := make([]any, 0, len(n.Members))
 	tags := make([]any, 0, len(n.Members))
 	for i, member := range n.Members {
-		outbound, err := singBoxOutbound(member)
+		outbound, err := buildNodeOutbounds(member, singBoxOutbound)
 		if err != nil {
 			return nil, err
 		}
 		tag := memberTag(i, member)
-		outbound["tag"] = tag
-		members = append(members, outbound)
+		outbound.main["tag"] = tag
+		members = append(members, outbound.main)
+		members = append(members, outbound.extras...)
 		tags = append(tags, tag)
 	}
 	auto := map[string]any{
-		"type":                        "urltest",
+		"type":                        urlTestType(n.StrategyOr()),
 		"tag":                         autoTag,
 		"outbounds":                   tags,
 		"interrupt_exist_connections": false,
@@ -62,31 +48,63 @@ func xrayOutbounds(n Node) ([]any, error) {
 	if n.Group() {
 		members := make([]any, 0, len(n.Members))
 		for i, member := range n.Members {
-			outbound, err := xrayOutbound(member)
+			outbound, err := buildNodeOutbounds(member, xrayOutbound)
 			if err != nil {
 				return nil, err
 			}
-			outbound["tag"] = memberTag(i, member)
-			members = append(members, outbound)
+			outbound.main["tag"] = memberTag(i, member)
+			members = append(members, outbound.main)
+			members = append(members, outbound.extras...)
 		}
 		return members, nil
 	}
-	outbound, err := xrayOutbound(n)
+	return nodeOutbounds(n, xrayOutbound)
+}
+
+type outboundBuilder func(Node) (map[string]any, error)
+
+type nodeOutboundsResult struct {
+	main   map[string]any
+	extras []any
+}
+
+func buildNodeOutbounds(n Node, build outboundBuilder) (nodeOutboundsResult, error) {
+	outbound, err := build(n)
+	if err != nil {
+		return nodeOutboundsResult{}, err
+	}
+	result := nodeOutboundsResult{main: outbound}
+	if n.Detour == nil || n.Detour.Direct() {
+		return result, nil
+	}
+	detour, err := build(*n.Detour)
+	if err != nil {
+		return nodeOutboundsResult{}, err
+	}
+	tag := detourTag + "-" + n.Name + "-" + outboundTag(outbound)
+	detour["tag"] = tag
+	if _, ok := outbound["type"]; ok {
+		outbound["detour"] = tag
+	} else {
+		outbound["sockopt"] = map[string]any{"dialerProxy": tag}
+	}
+	result.extras = append(result.extras, detour)
+	return result, nil
+}
+
+func nodeOutbounds(n Node, build outboundBuilder) ([]any, error) {
+	result, err := buildNodeOutbounds(n, build)
 	if err != nil {
 		return nil, err
 	}
-	outbounds := []any{outbound}
+	return append([]any{result.main}, result.extras...), nil
+}
 
-	if n.Detour != nil && !n.Detour.Direct() {
-		detour, err := xrayOutbound(*n.Detour)
-		if err != nil {
-			return nil, err
-		}
-		detour["tag"] = detourTag
-		outbound["sockopt"] = map[string]any{"dialerProxy": detourTag}
-		outbounds = append(outbounds, detour)
+func outboundTag(outbound map[string]any) string {
+	if tag, ok := outbound["tag"].(string); ok {
+		return tag
 	}
-	return outbounds, nil
+	return ""
 }
 
 func xrayMeasure(n Node) map[string]any {
@@ -95,7 +113,7 @@ func xrayMeasure(n Node) map[string]any {
 	}
 	selector := []any{proxyTag + "-"}
 	switch n.StrategyOr() {
-	case "leastLoad", "fallback":
+	case "fallback", "leastLoad":
 		return map[string]any{"burstObservatory": map[string]any{
 			"subjectSelector": selector,
 			"pingConfig": map[string]any{
@@ -116,20 +134,29 @@ func xrayMeasure(n Node) map[string]any {
 	return nil
 }
 
-func xrayBalancer(strategy string) map[string]any {
+func xrayBalancer(strategy string, n Node) map[string]any {
+	selector := []any{proxyTag + "-"}
+	fallback := strategy == "fallback"
+	for _, member := range n.Members {
+		if member.NeedsPin() {
+			fallback = true
+			break
+		}
+	}
+	if fallback {
+		return map[string]any{
+			"tag":      balancerTag,
+			"type":     "fallback",
+			"selector": selector,
+		}
+	}
 	out := map[string]any{
 		"tag":      balancerTag,
 		"selector": []any{proxyTag + "-"},
 		"strategy": map[string]any{"type": xrayBalancerType(strategy)},
 	}
-	if strategy == "leastLoad" || strategy == "fallback" {
-		settings := map[string]any{"expected": 1}
-		if strategy == "fallback" {
-
-			settings["tolerance"] = 0.2
-			settings["maxRTT"] = "5000ms"
-		}
-		out["strategy"].(map[string]any)["settings"] = settings
+	if strategy == "leastLoad" {
+		out["strategy"].(map[string]any)["settings"] = map[string]any{"expected": 1}
 	}
 	return out
 }
@@ -148,4 +175,11 @@ func xrayBalancerType(strategy string) string {
 
 func memberTag(i int, n Node) string {
 	return fmt.Sprintf("%s-%d-%s", proxyTag, i+1, n.Name)
+}
+
+func urlTestType(strategy string) string {
+	if strategy == "fallback" {
+		return "fallback"
+	}
+	return "urltest"
 }

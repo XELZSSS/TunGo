@@ -232,7 +232,7 @@ func (a *app) removeRule(at int) {
 }
 
 func ruleSummary(rule core.Rule) string {
-	remark := i18n.T(rule.Remark)
+	remark := rule.Remark
 	if remark == "" {
 		remark = i18n.T("未命名")
 	}

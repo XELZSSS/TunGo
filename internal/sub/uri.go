@@ -129,6 +129,9 @@ func hysteria2URI(n core.Node) (string, error) {
 	if len(n.ALPN) > 0 {
 		q.Set("alpn", strings.Join(n.ALPN, ","))
 	}
+	if n.ECH != "" {
+		q.Set("ech", n.ECH)
+	}
 	u.RawQuery = q.Encode()
 	u.Fragment = n.Name
 	return u.String(), nil
@@ -184,8 +187,20 @@ func vmessURI(n core.Node) (string, error) {
 	if n.Fingerprint != "" {
 		body["fp"] = n.Fingerprint
 	}
+	if n.Insecure {
+		body["allowInsecure"] = "1"
+	}
 	if n.Pinned != "" {
 		body["pcs"] = n.Pinned
+	}
+	if n.ECH != "" {
+		body["ech"] = n.ECH
+	}
+	if n.PublicKey != "" {
+		body["pbk"] = n.PublicKey
+	}
+	if n.ShortID != "" {
+		body["sid"] = n.ShortID
 	}
 	data, err := json.Marshal(body)
 	if err != nil {
