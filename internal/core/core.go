@@ -64,12 +64,12 @@ type Capabilities struct {
 }
 
 func (k Kind) Capabilities() Capabilities {
-	sing := k == SingBox
+	sing := PickKind(k) == SingBox
 	return Capabilities{Stats: sing, CloseConnections: sing}
 }
 
 func (k Kind) Strategies() []string {
-	if k == SingBox {
+	if PickKind(k) == SingBox {
 		return []string{"leastPing", "fallback"}
 	}
 	return GroupStrategies

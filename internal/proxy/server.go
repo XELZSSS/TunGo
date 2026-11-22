@@ -51,15 +51,18 @@ func (s *Server) Done() <-chan struct{} { return s.done }
 func (s *Server) Stats() (up, down int64) { return s.up.Load(), s.down.Load() }
 
 func (s *Server) Close() error {
-	err := s.ln.Close()
-	s.cancel()
-
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return nil
+	}
 	s.closed = true
 	conns := s.conns
 	s.conns = nil
 	s.mu.Unlock()
 
+	err := s.ln.Close()
+	s.cancel()
 	for conn := range conns {
 		conn.Close()
 	}

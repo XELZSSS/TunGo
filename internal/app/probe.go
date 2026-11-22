@@ -43,12 +43,9 @@ func measure(ctx context.Context, kind core.Kind, node core.Node, speed bool) (i
 	}
 	defer kernel.Stop()
 
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-		Transport: &http.Transport{
-			DialContext: (&proxy.Upstream{Addr: kernel.SocksAddr()}).DialContext,
-		},
-	}
+	transport := &http.Transport{DialContext: (&proxy.Upstream{Addr: kernel.SocksAddr()}).DialContext}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Timeout: 5 * time.Second, Transport: transport}
 	ms := -1
 	for _, url := range pingURLs {
 		if ctx.Err() != nil {
@@ -209,11 +206,10 @@ func (a *app) checkUnlock() {
 		return
 	}
 	a.event("%s", i18n.T("开始检测流媒体解锁"))
-	client := &http.Client{
-		Timeout:   15 * time.Second,
-		Transport: &http.Transport{DialContext: (&proxy.Upstream{Addr: addr}).DialContext},
-	}
+	transport := &http.Transport{DialContext: (&proxy.Upstream{Addr: addr}).DialContext}
+	client := &http.Client{Timeout: 15 * time.Second, Transport: transport}
 	go func() {
+		defer transport.CloseIdleConnections()
 		if region, err := exitRegion(client); err == nil {
 			a.update(func() { a.logf(i18n.T("出口地区：%s"), region) })
 		}

@@ -81,9 +81,14 @@ var (
 	savedOK bool
 )
 
+var (
+	wininet       = syscall.NewLazyDLL("wininet.dll")
+	setOptionProc = wininet.NewProc("InternetSetOptionW")
+	queryOption   = wininet.NewProc("InternetQueryOptionW")
+)
+
 func internetSetOption(what uint32, value unsafe.Pointer, size uintptr) error {
-	proc := syscall.NewLazyDLL("wininet.dll").NewProc("InternetSetOptionW")
-	ok, _, err := proc.Call(0, uintptr(what), uintptr(value), size)
+	ok, _, err := setOptionProc.Call(0, uintptr(what), uintptr(value), size)
 	if ok == 0 {
 		return fmt.Errorf("InternetSetOption %d: %w", what, err)
 	}
@@ -91,8 +96,7 @@ func internetSetOption(what uint32, value unsafe.Pointer, size uintptr) error {
 }
 
 func internetQueryOption(what uint32, value unsafe.Pointer, size *uint32) error {
-	proc := syscall.NewLazyDLL("wininet.dll").NewProc("InternetQueryOptionW")
-	ok, _, err := proc.Call(0, uintptr(what), uintptr(value), uintptr(unsafe.Pointer(size)))
+	ok, _, err := queryOption.Call(0, uintptr(what), uintptr(value), uintptr(unsafe.Pointer(size)))
 	if ok == 0 {
 		return fmt.Errorf("InternetQueryOption %d: %w", what, err)
 	}
