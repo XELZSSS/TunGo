@@ -16,10 +16,10 @@ func (a *app) dnsForm(c *ui.Context) {
 	}
 	t := c.Theme()
 	ui.Modal(c, &a.editingDNS, func() {
-		ui.Column(c).Gap(gapLoose).Width(560).Height(520).Children(func() {
+		ui.Column(c).Gap(gapLoose).Width(dialogBase).Height(dialogBody).Children(func() {
 			heading(c, i18n.T("DNS 设置"))
 			muted(c, t, i18n.T("三个都填 DoH：远程 DNS 走节点，直连域名用直连 DNS，引导 DNS 只用来解析上面两个的域名。全程加密，运营商看不到你查了什么。"))
-			ui.Scroll(c).Grow(1).Children(func() {
+			ui.Scroll(c).Grow(1).Padding(0, scrollGutter, 0, 0).Children(func() {
 				ui.Column(c).Gap(gapLoose).Children(func() {
 					preset := i18n.T(core.DNSPresetOf(core.DNS{Remote: a.dnsRemote, Direct: a.dnsDirect, Bootstrap: a.dnsBootstrap}))
 					if preset == "" {
@@ -146,7 +146,7 @@ func (a *app) routeNameForm(c *ui.Context) {
 	}
 	t := c.Theme()
 	ui.Modal(c, &a.editingRouteName, func() {
-		ui.Column(c).Gap(gapLoose).Width(420).Children(func() {
+		ui.Column(c).Gap(gapLoose).Width(dialogShort).Children(func() {
 			heading(c, i18n.T("新建路由配置"))
 			muted(c, t, i18n.T("新配置先照搬当前这套规则，再到「路由规则」里改它。"))
 			ui.TextInput(c, &a.routeName).Label(i18n.T("名称")).Placeholder(i18n.T("如：国内直连")).Grow(1)

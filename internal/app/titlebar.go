@@ -4,8 +4,6 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-const titleBarHeight float32 = 36
-
 const (
 	captionMinimize = iota
 	captionMaximize
@@ -23,7 +21,7 @@ func (a *app) titleBar(c *ui.Context, t *ui.Theme) {
 }
 
 func (a *app) caption(c *ui.Context, t *ui.Theme, kind int) {
-	button := ui.Box(c).Size(34, 24).Radius(4).Cursor(ui.CursorPointer).OnClick(func() {
+	button := ui.Box(c).Size(30, 22).Radius(4).Cursor(ui.CursorPointer).OnClick(func() {
 		switch kind {
 		case captionMinimize:
 			a.win.Minimize()

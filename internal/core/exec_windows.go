@@ -45,6 +45,10 @@ func stop(cmd *exec.Cmd) {
 	detach.Call()
 }
 
+func kill(cmd *exec.Cmd) {
+	cmd.Process.Kill()
+}
+
 func follow(cmd *exec.Cmd) {
 	job, err := jobHandle()
 	if err != nil {

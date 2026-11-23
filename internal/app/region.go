@@ -72,7 +72,6 @@ func (a *app) ensureRules(routing core.Routing, kind core.Kind, want int) {
 		if want == rulesReconnect && !a.connected() {
 			return
 		}
-		a.notice = ""
 		a.logf("%s", i18n.T("规则集已就绪"))
 		a.connect()
 	})

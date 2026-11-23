@@ -40,7 +40,7 @@ var releases = map[Kind]release{
 }
 
 func Latest(kind Kind) (string, error) {
-	url := githubURL + releases[kind].repo + "/releases/latest"
+	url := withMirror(githubURL + releases[kind].repo + "/releases/latest")
 	client := &http.Client{
 		Timeout:   15 * time.Second,
 		Transport: transport(),
@@ -149,7 +149,7 @@ func Install(kind Kind, tag string, progress func(part, whole int64)) (string, e
 	if err != nil {
 		return "", err
 	}
-	url := githubURL + releases[kind].repo + "/releases/download/" + tag + "/" + archive
+	url := withMirror(githubURL + releases[kind].repo + "/releases/download/" + tag + "/" + archive)
 	want, err := assetDigest(kind, tag, archive)
 	if err != nil {
 		return "", err
@@ -245,7 +245,7 @@ func platform(kind Kind) (string, error) {
 }
 
 func assetDigest(kind Kind, tag, name string) (string, error) {
-	url := githubAPI + releases[kind].repo + "/releases/tags/" + tag
+	url := withMirror(githubAPI + releases[kind].repo + "/releases/tags/" + tag)
 	var body bytes.Buffer
 	if err := fetch(url, &body, nil, 8<<20); err != nil {
 		return "", err
@@ -434,4 +434,47 @@ func runs(kind Kind, binary string) error {
 		return fmt.Errorf(i18n.T("%s 装好后跑不起来：%w"), kind, err)
 	}
 	return nil
+}
+
+func InstallFile(kind Kind, from string) error {
+	bin, err := binDir()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		return err
+	}
+	name := string(kind)
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	target := filepath.Join(bin, name)
+	fresh := target + ".new"
+	os.Remove(fresh)
+	if err := copyKernel(kind, from, fresh); err != nil {
+		os.Remove(fresh)
+		return err
+	}
+	if err := runs(kind, fresh); err != nil {
+		os.Remove(fresh)
+		return err
+	}
+	if err := os.Rename(fresh, target); err != nil {
+		os.Remove(fresh)
+		return err
+	}
+	return nil
+}
+
+func copyKernel(kind Kind, from, target string) error {
+	lower := strings.ToLower(from)
+	if strings.HasSuffix(lower, ".zip") || strings.HasSuffix(lower, ".tar.gz") || strings.HasSuffix(lower, ".tgz") {
+		return unpack(from, lower, string(kind), target)
+	}
+	in, err := os.Open(from)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	return write(in, target)
 }

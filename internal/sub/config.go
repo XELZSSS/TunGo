@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -13,8 +14,9 @@ import (
 )
 
 type subscription struct {
-	Proxies   []map[string]any `json:"proxies"`
-	Outbounds []map[string]any `json:"outbounds"`
+	Proxies     []map[string]any `json:"proxies"`
+	ProxyGroups []map[string]any `json:"proxy-groups"`
+	Outbounds   []map[string]any `json:"outbounds"`
 }
 
 var clashProtocols = map[string]string{
@@ -76,7 +78,7 @@ func parseConfig(text string) ([]core.Node, bool, error) {
 			return nil, false, nil
 		}
 		whole, _ := yamlValue(&root).(map[string]any)
-		doc = subscription{Proxies: maps(whole["proxies"]), Outbounds: maps(whole["outbounds"])}
+		doc = subscription{Proxies: maps(whole["proxies"]), ProxyGroups: maps(whole["proxy-groups"]), Outbounds: maps(whole["outbounds"])}
 	}
 	if len(doc.Proxies) == 0 && len(doc.Outbounds) == 0 {
 		return nil, false, nil
@@ -101,6 +103,7 @@ func parseConfig(text string) ([]core.Node, bool, error) {
 			keep(singBoxNode(outbound))
 		}
 	}
+	nodes = append(nodes, groups(doc, nodes)...)
 	if len(nodes) == 0 {
 		if failed == 0 {
 			return nil, true, errors.New(i18n.T("订阅里没有认得的节点"))
@@ -354,4 +357,54 @@ func flag(one map[string]any, key string) bool {
 		return value == "true"
 	}
 	return false
+}
+func groups(doc subscription, nodes []core.Node) []core.Node {
+	names := make(map[string]bool, len(nodes))
+	for _, node := range nodes {
+		names[node.Name] = true
+	}
+	var out []core.Node
+	seen := map[string]bool{}
+	add := func(name, strategy string, children []string) {
+		if name == "" || seen[name] || len(children) == 0 {
+			return
+		}
+		seen[name] = true
+		out = append(out, core.Node{Name: name, Role: core.GroupRole, Children: children, Strategy: strategy})
+	}
+	for _, group := range doc.ProxyGroups {
+		add(field(group, "name"), groupStrategy(field(group, "type")), members(values(group, "proxies"), names))
+	}
+	for _, outbound := range doc.Outbounds {
+		kind := field(outbound, "type")
+		if kind != "selector" && kind != "urltest" {
+			continue
+		}
+		add(field(outbound, "tag"), groupStrategy(kind), members(values(outbound, "outbounds"), names))
+	}
+	return out
+}
+
+func members(candidates []string, names map[string]bool) []string {
+	out := make([]string, 0, len(candidates))
+	for _, name := range candidates {
+		if names[name] {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+func groupStrategy(kind string) string {
+	switch strings.ToLower(kind) {
+	case "fallback":
+		return "fallback"
+	case "load-balance", "loadbalance", "leastload":
+		return "leastLoad"
+	case "random":
+		return "random"
+	case "round-robin", "roundrobin":
+		return "roundRobin"
+	}
+	return "leastPing"
 }

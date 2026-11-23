@@ -32,25 +32,47 @@ const (
 	gapBase  float32 = 8
 	gapLoose float32 = 12
 
-	padX      float32 = 16
-	padY      float32 = 8
+	padX      float32 = 12
+	padY      float32 = 6
 	padYDense float32 = 4
 )
 
 const (
-	fontS float32 = 12
-	fontM float32 = 13
-	fontL float32 = 20
+	fontS float32 = 11
+	fontM float32 = 12
+	fontL float32 = 15
 )
 
-const tableRowHeight float32 = 32
+const (
+	titleBarHeight float32 = 32
+	tableRowHeight float32 = 28
+	barHeight      float32 = 26
+)
+
+const scrollGutter float32 = 12
 
 const (
-	controlWide  float32 = 160
-	controlWider float32 = 190
-	buttonBase   float32 = 72
-	iconSize     float32 = 16
-	markSize     float32 = 12
+	dialogShort float32 = 440
+	dialogBase  float32 = 560
+	dialogWide  float32 = 640
+	dialogBody  float32 = 462
+)
+
+const (
+	cellTraffic float32 = 84
+	sparkBars           = 20
+	sparkBar    float32 = 2
+	sparkGap    float32 = 1
+	sparkHeight float32 = 12
+	sparkWidth  float32 = 59
+)
+
+const (
+	controlWide  float32 = 140
+	controlWider float32 = 170
+	buttonBase   float32 = 68
+	iconSize     float32 = 14
+	markSize     float32 = 10
 )
 
 var (

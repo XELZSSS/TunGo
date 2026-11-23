@@ -8,7 +8,7 @@ import (
 )
 
 func prepare(cmd *exec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL, Setpgid: true}
 }
 
 func Hide(cmd *exec.Cmd) {}
@@ -16,5 +16,9 @@ func Hide(cmd *exec.Cmd) {}
 func follow(cmd *exec.Cmd) {}
 
 func stop(cmd *exec.Cmd) {
-	cmd.Process.Signal(syscall.SIGINT)
+	syscall.Kill(-cmd.Process.Pid, syscall.SIGINT)
+}
+
+func kill(cmd *exec.Cmd) {
+	syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 }

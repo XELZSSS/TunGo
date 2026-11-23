@@ -58,6 +58,17 @@ func Carries(kind Kind, n Node) bool {
 	return true
 }
 
+func Unsupported(kind Kind, n Node) error {
+	if kind != Xray || n.TLS != "reality" || n.Group() {
+		return nil
+	}
+	switch n.Network {
+	case "", "tcp", "raw", "grpc":
+		return nil
+	}
+	return errors.New(i18n.T("xray 的 REALITY 只支持 tcp 和 grpc，换个传输或换 sing-box"))
+}
+
 type Capabilities struct {
 	Stats            bool
 	CloseConnections bool
@@ -243,7 +254,7 @@ func (k *Kernel) up() bool {
 	return true
 }
 
-func Start(kind Kind, n Node, socks string, tun bool) (*Kernel, error) {
+func Start(kind Kind, n Node, targets []Node, socks string, tun bool) (*Kernel, error) {
 	kind = PickKind(kind)
 
 	if !Carries(kind, n) {
@@ -274,7 +285,7 @@ func Start(kind Kind, n Node, socks string, tun bool) (*Kernel, error) {
 			clash = "127.0.0.1:0"
 			secret = rand.Text()
 		}
-		config, err := Config(kind, n, socks, policy, clash, secret, tunName)
+		config, err := Config(kind, n, targets, socks, policy, clash, secret, tunName)
 		if err != nil {
 			return nil, err
 		}
@@ -333,7 +344,7 @@ func (k *Kernel) Stop() {
 		select {
 		case <-k.done:
 		case <-time.After(stopTimeout):
-			k.cmd.Process.Kill()
+			kill(k.cmd)
 			<-k.done
 		}
 		os.Remove(k.path)

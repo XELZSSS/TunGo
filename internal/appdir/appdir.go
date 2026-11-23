@@ -86,6 +86,14 @@ func WriteJSON(name string, v any) error {
 	return WriteFile(path, data, 0o600)
 }
 
+func Remove(name string) {
+	path, err := file(name)
+	if err != nil {
+		return
+	}
+	os.Remove(path)
+}
+
 func file(name string) (string, error) {
 	d, err := Dir()
 	if err != nil {

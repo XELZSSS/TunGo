@@ -18,7 +18,8 @@ func (a *app) overlays(c *ui.Context) {
 	a.shortcutForm(c)
 	a.portForm(c)
 	a.policyForms(c)
-	a.ruleBaseForm(c)
+	a.mirrorForm(c)
+	a.restoreForm(c)
 	a.updateDialog(c)
 }
 
@@ -28,10 +29,10 @@ func (a *app) nodeForm(c *ui.Context) {
 	}
 	t := c.Theme()
 	ui.Modal(c, &a.editing, func() {
-		ui.Column(c).Gap(gapBase).Width(560).Height(560).Children(func() {
+		ui.Column(c).Gap(gapBase).Width(dialogBase).Height(dialogBody).Children(func() {
 			heading(c, i18n.T("节点"))
-			ui.Scroll(c).Grow(1).Children(func() {
-				ui.Column(c).Gap(gapBase).Children(func() {
+			ui.Scroll(c).Grow(1).Padding(0, scrollGutter, 0, 0).Children(func() {
+				ui.Column(c).Gap(gapBase).PaddingY(padYDense).Children(func() {
 					ui.TextInput(c, &a.draft.Name).Label(i18n.T("备注")).Placeholder(i18n.T("备注")).Grow(1)
 					ui.Row(c).Gap(gapBase).Children(func() {
 						ui.Select(c, &a.draft.Protocol, core.Protocols).Label(i18n.T("协议")).Width(170)
@@ -110,6 +111,10 @@ func (a *app) nodeForm(c *ui.Context) {
 							ui.Toggle(c, &a.draft.Fragment, i18n.T("TLS 分片（sing-box）"))
 							ui.Toggle(c, &a.draft.RecordFragment, i18n.T("记录分片（sing-box）"))
 						})
+						ui.Row(c).Gap(gapBase).Children(func() {
+							ui.TextInput(c, &a.draft.ECH).Label(i18n.T("ECH 配置")).Placeholder("-----BEGIN ECH CONFIGS-----").Grow(1)
+							ui.TextInput(c, &a.draft.Pinned).Label(i18n.T("证书 pin（SHA256，仅 xray）")).Grow(1)
+						})
 					}
 					if a.draft.TLS == "reality" {
 						ui.Row(c).Gap(gapBase).Children(func() {
@@ -186,6 +191,10 @@ func (a *app) commit() {
 	a.draft.ALPN = core.ParseList(a.alpn)
 	a.draft.Detour = a.detourOf()
 	a.draft.Raw = strings.TrimSpace(a.rawText)
+	if err := core.Unsupported(core.PickKind(core.Kind(a.kind)), a.draft); err != nil {
+		a.fail(err.Error())
+		return
+	}
 	if a.draft.Protocol == "direct" {
 		direct := directNode()
 		if a.draft.Name != "" {
@@ -213,7 +222,6 @@ func (a *app) commit() {
 	a.save()
 	a.logf(i18n.T("已保存节点：%s（%s）"), a.draft.Name, a.draft.Summary())
 	a.editing = false
-	a.notice = ""
 	if a.connected() {
 		a.connect()
 	}

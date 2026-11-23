@@ -63,7 +63,6 @@ func (a *app) applySysProxy() {
 	if want == sysproxy.ModeSet || want == sysproxy.ModePac {
 		a.applied = string(want)
 	}
-	a.notice = ""
 	a.logf(i18n.T("系统代理：%s"), proxyName(want))
 	a.syncWinHTTP()
 	a.saveSettings()
@@ -103,13 +102,13 @@ func (a *app) toggleProxy() {
 func proxyName(mode sysproxy.Mode) string {
 	switch mode {
 	case sysproxy.ModeClear:
-		return i18n.T("清除系统代理")
+		return i18n.T("关闭代理")
 	case sysproxy.ModeSet:
-		return i18n.T("自动配置系统代理")
+		return i18n.T("设为系统代理")
 	case sysproxy.ModePac:
-		return i18n.T("PAC 模式")
+		return i18n.T("PAC")
 	}
-	return i18n.T("不改变系统代理")
+	return i18n.T("不改动")
 }
 
 func proxyNames() []string {
@@ -141,7 +140,7 @@ func (a *app) portForm(c *ui.Context) {
 	}
 	t := c.Theme()
 	ui.Modal(c, &a.editingPort, func() {
-		ui.Column(c).Gap(gapLoose).Width(420).Children(func() {
+		ui.Column(c).Gap(gapLoose).Width(dialogShort).Children(func() {
 			heading(c, i18n.T("本地端口"))
 			muted(c, t, i18n.T("终端和其它软件连这个端口；留空表示每次启动随机。改完正在用的连接会重连。"))
 			ui.TextInput(c, &a.portText).Label(i18n.T("端口")).Placeholder("1080").Grow(1)

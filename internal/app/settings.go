@@ -5,18 +5,23 @@ import "tungo/internal/appdir"
 const settingsVersion = 1
 
 type settings struct {
-	Version   int               `json:"version"`
-	Skipped   map[string]string `json:"skipped"`
-	Kind      string            `json:"kind,omitempty"`
-	Theme     string            `json:"theme,omitempty"`
-	Lang      string            `json:"lang,omitempty"`
-	Proxy     string            `json:"proxy,omitempty"`
-	ProxyOn   string            `json:"proxyOn,omitempty"`
-	Tun       bool              `json:"tun,omitempty"`
-	Applied   string            `json:"applied,omitempty"`
-	Port      int               `json:"port,omitempty"`
-	Shortcuts map[string]string `json:"shortcuts,omitempty"`
-	RuleBase  string            `json:"ruleBase,omitempty"`
+	Version     int               `json:"version"`
+	Skipped     map[string]string `json:"skipped"`
+	Kind        string            `json:"kind,omitempty"`
+	Theme       string            `json:"theme,omitempty"`
+	Lang        string            `json:"lang,omitempty"`
+	Proxy       string            `json:"proxy,omitempty"`
+	ProxyOn     string            `json:"proxyOn,omitempty"`
+	Tun         bool              `json:"tun,omitempty"`
+	Applied     string            `json:"applied,omitempty"`
+	Port        int               `json:"port,omitempty"`
+	Shortcuts   map[string]string `json:"shortcuts,omitempty"`
+	Mirror      string            `json:"mirror,omitempty"`
+	AutoConnect bool              `json:"autoConnect,omitempty"`
+	StartHidden bool              `json:"startHidden,omitempty"`
+	NoReconnect bool              `json:"noReconnect,omitempty"`
+	NoNotify    bool              `json:"noNotify,omitempty"`
+	Pane        float32           `json:"pane,omitempty"`
 }
 
 func loadSettings() (settings, error) {

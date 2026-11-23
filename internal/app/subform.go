@@ -19,9 +19,9 @@ func (a *app) subForm(c *ui.Context) {
 	}
 	t := c.Theme()
 	ui.Modal(c, &a.editingSub, func() {
-		ui.Column(c).Gap(gapLoose).Width(660).Height(460).Children(func() {
+		ui.Column(c).Gap(gapLoose).Width(dialogWide).Height(dialogBody).Children(func() {
 			heading(c, i18n.T("订阅"))
-			ui.Scroll(c).Grow(1).Children(func() {
+			ui.Scroll(c).Grow(1).Padding(0, scrollGutter, 0, 0).Children(func() {
 				ui.Column(c).Gap(gapTight).Children(func() {
 					if len(a.subs.Items) == 0 {
 						muted(c, t, i18n.T("还没有订阅"))
@@ -75,7 +75,7 @@ func (a *app) subEditForm(c *ui.Context) {
 	}
 	t := c.Theme()
 	ui.Modal(c, &a.editingSubItem, func() {
-		ui.Column(c).Gap(gapLoose).Width(560).Children(func() {
+		ui.Column(c).Gap(gapLoose).Width(dialogBase).Children(func() {
 			heading(c, i18n.T("订阅"))
 			ui.TextInput(c, &a.subDraft.Name).Label(i18n.T("名称")).Placeholder(i18n.T("如：机场 A")).Grow(1)
 			ui.TextInput(c, &a.subDraft.URL).Label(i18n.T("订阅地址")).Placeholder("https://…").Grow(1)
@@ -195,5 +195,11 @@ func trafficName(item sub.Item) string {
 }
 
 func sizeName(bytes int64) string {
-	return fmt.Sprintf("%.1f GB", float64(bytes)/(1<<30))
+	switch {
+	case bytes < 1<<30:
+		return fmt.Sprintf("%.1f MB", float64(bytes)/(1<<20))
+	case bytes < 1<<40:
+		return fmt.Sprintf("%.1f GB", float64(bytes)/(1<<30))
+	}
+	return fmt.Sprintf("%.2f TB", float64(bytes)/(1<<40))
 }

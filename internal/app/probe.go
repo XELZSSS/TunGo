@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -37,7 +38,7 @@ func measure(ctx context.Context, kind core.Kind, node core.Node, speed bool) (i
 		return -1, 0, ctx.Err()
 	}
 	defer func() { <-measureSlots }()
-	kernel, err := startKernel(kind, node, false)
+	kernel, err := startKernel(kind, node, nil, false)
 	if err != nil {
 		return -1, 0, err
 	}
@@ -181,22 +182,43 @@ func (a *app) speedLabel(i int) string {
 	return fmt.Sprintf("%.1f MB/s", a.speed[i])
 }
 
-var unlockSites = []struct {
-	name string
-	url  string
-}{
-	{"Netflix", "https://www.netflix.com/title/81215567"},
-	{"YouTube Premium", "https://www.youtube.com/premium"},
-	{"Disney+", "https://www.disneyplus.com/"},
-	{"ChatGPT", "https://chatgpt.com/cdn-cgi/trace"},
-	{"Spotify", "https://open.spotify.com/"},
+type unlockSite struct {
+	name  string
+	url   string
+	works func(region string) bool
 }
 
-var blockedMarkers = []string{
-	"not available in your region",
-	"not available in your country",
-	"unavailable in your country",
-	"unsupported_country",
+var unlockSites = []unlockSite{
+	{"Netflix", "https://www.netflix.com/title/81215567", besides("CN", "KP", "SY", "CU", "IR", "RU")},
+	{"YouTube Premium", "https://www.youtube.com/premium", besides("CN", "KP", "SY", "CU", "IR", "RU")},
+	{"Disney+", "https://www.disneyplus.com/", besides("CN", "KP", "SY", "CU", "IR", "RU")},
+	{"Spotify", "https://open.spotify.com/", besides("CN", "KP", "SY", "CU", "IR", "RU")},
+	{"ChatGPT", "https://chatgpt.com/", besides("CN", "KP", "SY", "CU", "IR", "RU", "BY")},
+	{"Hulu", "https://www.hulu.com/", only("US")},
+	{"BBC iPlayer", "https://www.bbc.co.uk/iplayer", only("GB")},
+}
+
+func only(region string) func(string) bool {
+	return func(at string) bool { return at == region }
+}
+
+func besides(regions ...string) func(string) bool {
+	return func(at string) bool { return at != "" && !slices.Contains(regions, at) }
+}
+
+func (s unlockSite) verdict(client *http.Client, region string) string {
+	if !s.works(region) {
+		return i18n.T("地区不支持")
+	}
+	resp, err := client.Get(s.url)
+	if err != nil {
+		return i18n.T("连不上")
+	}
+	resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return fmt.Sprint(resp.StatusCode)
+	}
+	return i18n.T("可用")
 }
 
 func (a *app) checkUnlock() {
@@ -210,12 +232,15 @@ func (a *app) checkUnlock() {
 	client := &http.Client{Timeout: 15 * time.Second, Transport: transport}
 	go func() {
 		defer transport.CloseIdleConnections()
-		if region, err := exitRegion(client); err == nil {
-			a.update(func() { a.logf(i18n.T("出口地区：%s"), region) })
+		region, err := exitRegion(client)
+		if err != nil {
+			a.update(func() { a.logf("%s", i18n.T("没读到出口地区，跳过解锁判断")) })
+			return
 		}
+		a.update(func() { a.logf(i18n.T("出口地区：%s"), region) })
 		for _, site := range unlockSites {
-			verdict := probeSite(client, site.url)
-			a.update(func() { a.logf("%s：%s", site.name, verdict) })
+			text := site.verdict(client, region)
+			a.update(func() { a.logf("%s：%s", site.name, text) })
 		}
 	}()
 }
@@ -236,26 +261,4 @@ func exitRegion(client *http.Client) (string, error) {
 		}
 	}
 	return "", errors.New(i18n.T("没读到出口地区"))
-}
-
-func probeSite(client *http.Client, url string) string {
-	resp, err := client.Get(url)
-	if err != nil {
-		return i18n.T("连不上")
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return i18n.T("连不上")
-	}
-	lower := strings.ToLower(string(body))
-	for _, marker := range blockedMarkers {
-		if strings.Contains(lower, marker) {
-			return i18n.T("被限制")
-		}
-	}
-	if resp.StatusCode >= 400 {
-		return fmt.Sprint(resp.StatusCode)
-	}
-	return i18n.T("可用")
 }

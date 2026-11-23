@@ -107,31 +107,49 @@ func outboundTag(outbound map[string]any) string {
 	return ""
 }
 
-func xrayMeasure(n Node) map[string]any {
-	if !n.Group() {
-		return nil
+func xrayMeasure(n Node, targets []Node) map[string]any {
+	subject := []any{}
+	observatory, burst := false, false
+	watch := func(node Node, prefix string) {
+		switch node.StrategyOr() {
+		case "fallback", "leastLoad":
+			burst = true
+		case "leastPing":
+			observatory = true
+		default:
+			return
+		}
+		subject = append(subject, prefix)
 	}
-	selector := []any{proxyTag + "-"}
-	switch n.StrategyOr() {
-	case "fallback", "leastLoad":
-		return map[string]any{"burstObservatory": map[string]any{
-			"subjectSelector": selector,
+	if n.Group() {
+		watch(n, proxyTag+"-")
+	}
+	for _, target := range targets {
+		if target.Group() {
+			watch(target, TargetTag(target.Name)+"/")
+		}
+	}
+	out := map[string]any{}
+	if burst {
+		out["burstObservatory"] = map[string]any{
+			"subjectSelector": subject,
 			"pingConfig": map[string]any{
 				"destination": probeURL,
 				"interval":    "5m",
 				"timeout":     "30s",
 				"sampling":    2,
 			},
-		}}
-	case "leastPing":
-		return map[string]any{"observatory": map[string]any{
-			"subjectSelector":   selector,
+		}
+	}
+	if observatory {
+		out["observatory"] = map[string]any{
+			"subjectSelector":   subject,
 			"probeUrl":          probeURL,
 			"probeInterval":     "3m",
 			"enableConcurrency": true,
-		}}
+		}
 	}
-	return nil
+	return out
 }
 
 func xrayBalancer(strategy string, n Node) map[string]any {

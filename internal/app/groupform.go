@@ -74,7 +74,7 @@ func (a *app) groupForm(c *ui.Context) {
 	}
 	t := c.Theme()
 	ui.Modal(c, &a.editingGroup, func() {
-		ui.Column(c).Gap(gapBase).Width(560).Height(560).Children(func() {
+		ui.Column(c).Gap(gapBase).Width(dialogBase).Height(dialogBody).Children(func() {
 			heading(c, i18n.T("策略组"))
 			ui.Row(c).Gap(gapBase).Children(func() {
 				ui.TextInput(c, &a.groupName).Label(i18n.T("备注")).Placeholder(i18n.T("备注")).Grow(1)
@@ -87,7 +87,7 @@ func (a *app) groupForm(c *ui.Context) {
 					FontSize(fontS).TextColor(t.Danger)
 			}
 			muted(c, t, i18n.T("成员（按顺序）"))
-			ui.Scroll(c).Grow(1).Children(func() {
+			ui.Scroll(c).Grow(1).Padding(0, scrollGutter, 0, 0).Children(func() {
 				ui.Column(c).Gap(gapTight).Children(func() {
 					for i := range a.nodes {
 						node := a.nodes[i]
@@ -149,7 +149,6 @@ func (a *app) commitGroup() {
 	a.editingGroup = false
 	a.save()
 	a.logf(i18n.T("已保存节点：%s（%s）"), group.Name, group.Summary())
-	a.notice = ""
 	if a.connected() {
 		a.connect()
 	}

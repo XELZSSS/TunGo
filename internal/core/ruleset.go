@@ -17,29 +17,14 @@ import (
 const (
 	ruleSetBase = "2dust/sing-box-rules/rule-set-"
 	adblockPath = "217heidai/adblockfilters/dist/adblocksingbox.srs"
-	defaultBase = "https://raw.githubusercontent.com/"
+	rawBase     = "https://raw.githubusercontent.com/"
 )
-
-var sourceBase = defaultBase
-
-func SetSourceBase(base string) {
-	base = strings.TrimSpace(base)
-	if base == "" {
-		base = defaultBase
-	}
-	if !strings.HasSuffix(base, "/") {
-		base += "/"
-	}
-	sourceBase = base
-}
-
-func SourceBase() string { return sourceBase }
 
 func ruleSetURL(kind, tag string) string {
 	if kind == "geosite" && tag == "adblock" {
-		return sourceBase + adblockPath
+		return withMirror(rawBase + adblockPath)
 	}
-	return sourceBase + ruleSetBase + kind + "/" + kind + "-" + tag + ".srs"
+	return withMirror(rawBase + ruleSetBase + kind + "/" + kind + "-" + tag + ".srs")
 }
 
 func RefreshRuleSets(kind Kind) (int, error) {
@@ -50,6 +35,14 @@ func RefreshRuleSets(kind Kind) (int, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return 0, err
+	}
+	var failures []error
+	unpack := kind == Xray
+	if unpack {
+		if _, err := Binary(SingBox); err != nil {
+			unpack = false
+			failures = append(failures, errors.New(i18n.T("xray 读文本列表要靠 sing-box 反编译，本机没有 sing-box：规则集已下载，文本列表沿用旧的")))
+		}
 	}
 	updated := 0
 	for _, entry := range entries {
@@ -63,25 +56,23 @@ func RefreshRuleSets(kind Kind) (int, error) {
 		}
 		path := filepath.Join(dir, name)
 		if err := fetchRuleSet(ruleSetURL(setKind, tag), path); err != nil {
-			return updated, fmt.Errorf("%s: %w", name, err)
-		}
-		if kind == Xray {
-			if err := decompile(path, strings.TrimSuffix(path, ".srs")); err != nil {
-				return updated, err
-			}
+			failures = append(failures, fmt.Errorf("%s: %w", name, err))
+			continue
 		}
 		updated++
+		if unpack {
+			if err := decompile(path, strings.TrimSuffix(path, ".srs")); err != nil {
+				failures = append(failures, fmt.Errorf("%s: %w", name, err))
+			}
+		}
 	}
-	return updated, nil
+	return updated, errors.Join(failures...)
 }
 
 func have(entry string, kind Kind) bool {
 	k, tag := geoKindTag(entry)
-	if ruleSetPath(k+"-"+tag+".srs") != "" {
-		return true
-	}
 	if kind != Xray {
-		return false
+		return ruleSetPath(k+"-"+tag+".srs") != ""
 	}
 	if k == "geoip" {
 		return ruleSetPath(k+"-"+tag+".cidrs.txt") != ""

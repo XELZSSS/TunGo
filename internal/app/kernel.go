@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/egoist/mygo"
+
 	"tungo/internal/core"
 	"tungo/internal/i18n"
 )
@@ -180,4 +182,38 @@ func binHint() string {
 		return i18n.T("安装目录的 bin 下")
 	}
 	return dir
+}
+
+func (a *app) installFromFile() {
+	kind := a.kernelKind()
+	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
+		Parent: a.win,
+		Title:  fmt.Sprintf(i18n.T("选择 %s 的内核文件"), kind),
+		Filters: []mygo.FileFilter{
+			{Name: i18n.T("内核压缩包或可执行文件"), Extensions: []string{"zip", "tar.gz", "tgz", "exe", "*"}},
+		},
+	})
+	if err != nil {
+		a.fail(err.Error())
+		a.logf("%s", err)
+		return
+	}
+	if len(paths) == 0 {
+		return
+	}
+	from := paths[0]
+	a.logf(i18n.T("正在从 %s 安装 %s"), from, kind)
+	go func() {
+		err := core.InstallFile(kind, from)
+		a.update(func() {
+			if err != nil {
+				a.fail(err.Error())
+				a.logf(i18n.T("安装内核失败：%s"), err)
+				return
+			}
+			a.versionFor = ""
+			a.know(kind)
+			a.event(i18n.T("%s 已从 %s 安装"), kind, from)
+		})
+	}()
 }

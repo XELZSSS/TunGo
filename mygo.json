@@ -3,7 +3,7 @@
   "slug": "tungo",
   "identifier": "com.tungo.app",
   "urlSchemes": ["tungo"],
-  "version": "1.4.0",
+  "version": "1.5.0",
   "copyright": "Copyright © 2026 XELZSSS",
   "license": "MIT",
   "updates": {

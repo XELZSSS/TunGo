@@ -1,18 +1,24 @@
-//go:build !windows && !linux
+//go:build !windows && !linux && !darwin
 
 package core
 
 import (
-	"os"
 	"os/exec"
+	"syscall"
 )
 
-func prepare(cmd *exec.Cmd) {}
+func prepare(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+}
 
 func Hide(cmd *exec.Cmd) {}
 
 func follow(cmd *exec.Cmd) {}
 
 func stop(cmd *exec.Cmd) {
-	cmd.Process.Signal(os.Interrupt)
+	syscall.Kill(-cmd.Process.Pid, syscall.SIGINT)
+}
+
+func kill(cmd *exec.Cmd) {
+	syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 }

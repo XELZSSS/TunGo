@@ -1,29 +1,12 @@
 package app
 
-import (
-	"github.com/egoist/mygo/ui"
-)
+import "tungo/internal/i18n"
 
-type noticeKind int
+func (a *app) hint(text string) { a.logf("%s", text) }
 
-const (
-	noticeHint noticeKind = iota
-	noticeDone
-	noticeFail
-)
+func (a *app) say(text string) { a.event("%s", text) }
 
-func (a *app) hint(text string) { a.notice, a.noticeKind = text, noticeHint }
-
-func (a *app) say(text string) { a.notice, a.noticeKind = text, noticeDone }
-
-func (a *app) fail(text string) { a.notice, a.noticeKind = text, noticeFail }
-
-func (a *app) noticeColor(t *ui.Theme) ui.Color {
-	switch a.noticeKind {
-	case noticeDone:
-		return t.Success
-	case noticeFail:
-		return t.Danger
-	}
-	return t.TextMuted
+func (a *app) fail(text string) {
+	a.tab = 0
+	a.logf(i18n.T("错误：%s"), text)
 }

@@ -81,13 +81,6 @@ func (a *app) probe() {
 	}()
 }
 
-func (a *app) pingNode(i int) {
-	if i < 0 || i >= len(a.nodes) {
-		return
-	}
-	go a.pingAt(a.nodes[i])
-}
-
 func nodeAddr(node core.Node) string {
 	if node.Direct() {
 		return probeAddr
@@ -143,10 +136,56 @@ func (a *app) syncRows() {
 		if a.group != "" && node.Sub != a.group {
 			continue
 		}
+		if !matches(node, a.search) {
+			continue
+		}
 		shown = append(shown, i)
 	}
 	a.shown = shown
 	a.sortRows()
+}
+
+func matches(node core.Node, query string) bool {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return true
+	}
+	for _, field := range []string{node.Name, node.Server, node.Protocol, node.Sub} {
+		if strings.Contains(strings.ToLower(field), query) {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *app) removePicked() {
+	dropped := map[int]bool{}
+	for index := range a.picked.All() {
+		dropped[index] = true
+	}
+	if len(dropped) == 0 {
+		return
+	}
+	kept := make([]core.Node, 0, len(a.nodes))
+	ms := make([]int, 0, len(a.nodes))
+	speed := make([]float64, 0, len(a.nodes))
+	for i, node := range a.nodes {
+		if dropped[i] && !node.Direct() {
+			continue
+		}
+		kept = append(kept, node)
+		ms = append(ms, a.ms[i])
+		speed = append(speed, a.speed[i])
+	}
+	a.picked.Clear()
+	a.nodes, a.ms, a.speed = kept, ms, speed
+	a.chosen = 0
+	a.nodesChanged()
+	a.save()
+	a.logf(i18n.T("已删除 %d 个节点"), len(dropped))
+	if a.connected() {
+		a.connect()
+	}
 }
 
 func (a *app) rowOf(node int) int {
@@ -415,6 +454,27 @@ func (a *app) applySubs(results []subResult, proxied bool) {
 		a.subNote = fmt.Sprintf(i18n.T("订阅已更新：%d 个成功，%d 个失败"), ok, failed)
 	}
 	a.saveSubs()
+}
+
+func (a *app) targetsFor(kind core.Kind) ([]core.Node, error) {
+	var out []core.Node
+	seen := map[string]bool{}
+	for _, rule := range a.routes.Routing().Rules {
+		if core.IsOut(rule.Out) || seen[rule.Out] {
+			continue
+		}
+		at := slices.IndexFunc(a.nodes, func(node core.Node) bool { return node.Name == rule.Out })
+		if at < 0 {
+			return nil, fmt.Errorf(i18n.T("规则「%s」的出口「%s」不在节点列表里"), rule.Remark, rule.Out)
+		}
+		node := a.resolved(a.nodes[at])
+		if !core.Carries(kind, node) {
+			return nil, fmt.Errorf(i18n.T("%s 带不了规则「%s」的出口「%s」"), kind, rule.Remark, rule.Out)
+		}
+		seen[rule.Out] = true
+		out = append(out, node)
+	}
+	return out, nil
 }
 
 const probeWorkers = 12

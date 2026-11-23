@@ -55,17 +55,17 @@ func (a *app) table(c *ui.Context, t *ui.Theme) {
 		}
 		a.rowAt = a.row
 	}
-	ui.Themed(c, listTheme(t)).Grow(1).Children(func() {
+	ui.Themed(c, listTheme(t)).Grow(1).Padding(0, scrollGutter, 0, 0).Children(func() {
 		ui.Table(c, &a.list, []ui.TableColumn{
-			{ID: "name", Title: i18n.T("备注"), MinWidth: 140, Sortable: true},
-			{ID: "addr", Title: i18n.T("地址"), Width: 170},
-			{ID: "proto", Title: i18n.T("协议"), Width: 100},
-			{ID: "net", Title: i18n.T("传输"), Width: 96},
-			{ID: "cipher", Title: i18n.T("加密"), Width: 160},
-			{ID: "tls", Title: i18n.T("安全"), Width: 124},
-			{ID: "group", Title: i18n.T("分组"), Width: 96},
-			{ID: "delay", Title: i18n.T("延迟"), Width: 76, Align: ui.End, Sortable: true},
-			{ID: "speed", Title: i18n.T("速度"), Width: 72, Align: ui.End, Sortable: true},
+			{ID: "name", Title: i18n.T("备注"), MinWidth: 150, Sortable: true},
+			{ID: "addr", Title: i18n.T("地址"), Width: 150},
+			{ID: "proto", Title: i18n.T("协议"), Width: 96},
+			{ID: "net", Title: i18n.T("传输"), Width: 84},
+			{ID: "cipher", Title: i18n.T("加密"), Width: 130},
+			{ID: "tls", Title: i18n.T("安全"), Width: 104},
+			{ID: "group", Title: i18n.T("分组"), Width: 88},
+			{ID: "delay", Title: i18n.T("延迟"), Width: 72, Sortable: true},
+			{ID: "speed", Title: i18n.T("速度"), Width: 84, Sortable: true},
 		}, len(a.shown), func(row, col int) {
 
 			if row < 0 || row >= len(a.shown) {
@@ -74,25 +74,24 @@ func (a *app) table(c *ui.Context, t *ui.Theme) {
 			at := a.shown[row]
 			node := a.nodes[at]
 			cell := ui.Box(c).FillWidth().Children(func() {
-
 				if node.Group() {
 					switch col {
 					case 0:
 						a.remark(c, t, node.Name, at)
 					case 1:
-						code(c, t, strings.Join(node.Children, ", "))
+						cellCode(c, t, strings.Join(node.Children, ", "))
 					case 2:
-						muted(c, t, i18n.T("策略组"))
+						cellSoft(c, t, i18n.T("策略组"))
 					case 4:
-						muted(c, t, "—")
+						cellSoft(c, t, "—")
 					case 5:
-						muted(c, t, strategyName(node.StrategyOr()))
+						cellSoft(c, t, strategyName(node.StrategyOr()))
 					case 6:
-						muted(c, t, node.Sub)
+						cellSoft(c, t, node.Sub)
 					case 7:
 						a.delay(c, t, at)
 					case 8:
-						code(c, t, a.speedLabel(at))
+						cellCode(c, t, a.speedLabel(at))
 					}
 					return
 				}
@@ -104,21 +103,21 @@ func (a *app) table(c *ui.Context, t *ui.Theme) {
 					if node.Port != 0 {
 						where = net.JoinHostPort(node.Server, fmt.Sprint(node.Port))
 					}
-					code(c, t, where)
+					cellCode(c, t, where)
 				case 2:
-					code(c, t, node.Protocol)
+					cellCode(c, t, node.Protocol)
 				case 3:
-					code(c, t, transport(node))
+					cellCode(c, t, transport(node))
 				case 4:
-					code(c, t, cipher(node))
+					cellCode(c, t, cipher(node))
 				case 5:
-					muted(c, t, security(node))
+					cellSoft(c, t, security(node))
 				case 6:
-					muted(c, t, node.Sub)
+					cellSoft(c, t, node.Sub)
 				case 7:
 					a.delay(c, t, at)
 				case 8:
-					code(c, t, a.speedLabel(at))
+					cellCode(c, t, a.speedLabel(at))
 				}
 			})
 			cell.ContextMenu(func(m *ui.Menu) { a.nodeMenu(m, at) })
@@ -145,47 +144,53 @@ func (a *app) emptyPane(c *ui.Context, t *ui.Theme, text string) {
 
 func (a *app) remark(c *ui.Context, t *ui.Theme, name string, at int) {
 	if at != a.chosen {
-		ui.Text(c, name).FontSize(fontM)
+		ui.Text(c, name).SingleLine().FontSize(fontM)
 		return
 	}
 	ui.Row(c).Gap(gapTight).AlignItems(ui.Center).Children(func() {
 		ui.Icon(c, iconDot).Size(markSize, markSize).TextColor(t.Success)
-		ui.Text(c, name).FontSize(fontM)
+		ui.Text(c, name).SingleLine().FontSize(fontM)
 	})
+}
+
+func cellCode(c *ui.Context, t *ui.Theme, text string) {
+	ui.Text(c, text).SingleLine().Font(fontMono).FontSize(fontS).TextColor(t.TextMuted)
+}
+
+func cellSoft(c *ui.Context, t *ui.Theme, text string) {
+	ui.Text(c, text).SingleLine().FontSize(fontS).TextColor(t.TextMuted)
 }
 
 func (a *app) delay(c *ui.Context, t *ui.Theme, at int) {
 	if at < 0 || at >= len(a.ms) || a.ms[at] <= 0 {
-		code(c, t, "—")
+		cellCode(c, t, "—")
 		return
 	}
 	color := t.Text
 	if a.ms[at] > 500 {
 		color = t.Warning
 	}
-	ui.Text(c, a.latency(at)).Font(fontMono).FontSize(fontS).TextColor(color)
-}
-
-func traffic(c *ui.Context, t *ui.Theme, up, down int64) {
-	if up == 0 && down == 0 {
-		code(c, t, "—")
-		return
-	}
-	for _, one := range []struct {
-		icon *ui.SVG
-		n    int64
-	}{{iconUp, up}, {iconDown, down}} {
-		ui.Row(c).Gap(gapTight).AlignItems(ui.Center).TextColor(t.TextMuted).Children(func() {
-			ui.Icon(c, one.icon).Size(iconSize, iconSize)
-			ui.Text(c, size(one.n)).Font(fontMono).FontSize(fontS)
-		})
-	}
+	ui.Text(c, a.latency(at)).SingleLine().Font(fontMono).FontSize(fontS).TextColor(color)
 }
 
 func (a *app) panes(c *ui.Context, t *ui.Theme) {
 	ui.Column(c).Fill().Children(func() {
-		ui.Row(c).AlignItems(ui.Center).PaddingX(padX).PaddingY(padYDense).Children(func() {
+		ui.Row(c).Gap(gapBase).AlignItems(ui.Center).PaddingX(padX).PaddingY(padYDense).Children(func() {
 			ui.Tabs(c, &a.tab, i18n.T("日志"), i18n.T("连接"))
+			ui.Box(c).Grow(1)
+			if a.tab == 0 {
+				if ui.Button(c, i18n.T("复制")).Clicked() {
+					a.copyLogs(c)
+				}
+				if ui.Button(c, i18n.T("清空")).Clicked() {
+					a.clearLogs()
+				}
+			} else {
+				muted(c, t, fmt.Sprintf(i18n.T("%d 个连接"), len(a.conns)))
+				if ui.Button(c, i18n.T("断开")).Disabled(len(a.conns) == 0 || a.statless()).Clicked() {
+					a.dropConns()
+				}
+			}
 		})
 		ui.Box(c).Grow(1).Children(func() {
 			if a.tab == 0 {
@@ -198,73 +203,51 @@ func (a *app) panes(c *ui.Context, t *ui.Theme) {
 }
 
 func (a *app) log(c *ui.Context, t *ui.Theme) {
-	ui.Column(c).Fill().Children(func() {
-		ui.Row(c).Gap(gapBase).AlignItems(ui.Center).PaddingX(padX).PaddingY(padYDense).Children(func() {
-			if ui.Button(c, i18n.T("复制")).Clicked() {
-				a.copyLogs(c)
+	if len(a.logs) == 0 {
+		a.emptyPane(c, t, i18n.T("还没有日志"))
+		return
+	}
+	if a.logScroll.Y >= a.logScroll.MaxY {
+		a.logScroll.Y = math.MaxFloat32
+	}
+	ui.Scroll(c).Grow(1).Padding(0, scrollGutter, 0, 0).TrackScroll(&a.logScroll).Children(func() {
+		ui.Column(c).Gap(gapTight).Padding(padX, 0, padX, padX).Children(func() {
+			for _, line := range a.logs {
+				code(c, t, line)
 			}
-			if ui.Button(c, i18n.T("清空")).Clicked() {
-				a.clearLogs()
-			}
-			ui.Box(c).Grow(1)
-		})
-		if len(a.logs) == 0 {
-			a.emptyPane(c, t, i18n.T("还没有日志"))
-			return
-		}
-
-		if a.logScroll.Y >= a.logScroll.MaxY {
-			a.logScroll.Y = math.MaxFloat32
-		}
-		ui.Scroll(c).Grow(1).TrackScroll(&a.logScroll).Children(func() {
-			ui.Column(c).Gap(gapTight).Padding(padX).Children(func() {
-				for _, line := range a.logs {
-					code(c, t, line)
-				}
-			})
 		})
 	})
 }
 
 func (a *app) sessions(c *ui.Context, t *ui.Theme) {
-	ui.Column(c).Fill().Children(func() {
-		ui.Row(c).Gap(gapBase).AlignItems(ui.Center).PaddingX(padX).PaddingY(padYDense).Children(func() {
-			muted(c, t, fmt.Sprintf(i18n.T("%d 个连接"), len(a.conns)))
-			if ui.Button(c, i18n.T("断开")).Disabled(len(a.conns) == 0).Clicked() {
-				a.dropConns()
+	if len(a.conns) == 0 {
+		a.emptyPane(c, t, a.sessionsNote())
+		return
+	}
+	ui.Themed(c, listTheme(t)).Grow(1).Padding(0, scrollGutter, 0, 0).Children(func() {
+		ui.Table(c, &a.connList, []ui.TableColumn{
+			{Title: i18n.T("主机"), MinWidth: 140},
+			{Title: i18n.T("规则"), Width: 110},
+			{Title: i18n.T("网络"), Width: 60},
+			{Title: i18n.T("类型"), Width: 76},
+			{Title: i18n.T("时间"), Width: 72},
+		}, len(a.conns), func(row, col int) {
+			if row < 0 || row >= len(a.conns) {
+				return
 			}
-			ui.Box(c).Grow(1)
-		})
-		if len(a.conns) == 0 {
-			a.emptyPane(c, t, a.sessionsNote())
-			return
-		}
-		ui.Themed(c, listTheme(t)).Grow(1).Children(func() {
-			ui.Table(c, &a.connList, []ui.TableColumn{
-				{Title: i18n.T("主机"), MinWidth: 140},
-				{Title: i18n.T("规则"), Width: 110},
-				{Title: i18n.T("网络"), Width: 60},
-				{Title: i18n.T("类型"), Width: 76},
-				{Title: i18n.T("时间"), Width: 72, Align: ui.End},
-			}, len(a.conns), func(row, col int) {
-
-				if row < 0 || row >= len(a.conns) {
-					return
-				}
-				one := a.conns[row]
-				switch col {
-				case 0:
-					code(c, t, one.Host)
-				case 1:
-					muted(c, t, one.Chain)
-				case 2:
-					code(c, t, one.Network)
-				case 3:
-					code(c, t, one.Type)
-				case 4:
-					code(c, t, elapsed(one.Started))
-				}
-			})
+			one := a.conns[row]
+			switch col {
+			case 0:
+				cellCode(c, t, one.Host)
+			case 1:
+				cellSoft(c, t, one.Chain)
+			case 2:
+				cellCode(c, t, one.Network)
+			case 3:
+				cellCode(c, t, one.Type)
+			case 4:
+				cellCode(c, t, elapsed(one.Started))
+			}
 		})
 	})
 }
@@ -344,6 +327,12 @@ func (a *app) toolBar(c *ui.Context, t *ui.Theme) {
 				a.group = groups[at]
 			}
 			a.rowAt = -1
+			a.rowsDirty = true
+		}
+		ui.Box(c).Grow(1)
+		if ui.SearchField(c, &a.search).Label(i18n.T("搜索节点")).Width(200).Changed() {
+			a.rowAt = -1
+			a.rowsDirty = true
 		}
 	})
 }
@@ -391,30 +380,127 @@ func (a *app) statusColor(t *ui.Theme) ui.Color {
 }
 
 func (a *app) statusBar(c *ui.Context, t *ui.Theme) {
-	ui.Row(c).Gap(gapBase).AlignItems(ui.Center).PaddingX(padX).PaddingY(padY).Background(t.Background).Children(func() {
-		ui.Text(c, a.statusText()).FontSize(fontS).FontWeight(weightSemibold).TextColor(a.statusColor(t))
-		code(c, t, a.inbound())
-		ui.Box(c).Grow(1)
-		if a.notice != "" {
-			ui.Text(c, a.notice).FontSize(fontS).TextColor(a.noticeColor(t))
-		} else if a.subNote != "" {
-			muted(c, t, a.subNote)
+	color := a.statusColor(t)
+	ui.Row(c).Gap(gapBase).AlignItems(ui.Center).Height(barHeight).PaddingX(padX).Background(t.Background).Children(func() {
+		label := ui.Text(c, a.statusLabel()).SingleLine().FontSize(fontS).FontWeight(weightSemibold).TextColor(color)
+		if tip := a.barTip(); tip != "" {
+			label.Tooltip(tip)
 		}
-		traffic(c, t, a.upRaw-a.upBase, a.downRaw-a.downBase)
-		if spark := sparkline(a.hist); spark != "" {
-			code(c, t, spark)
+		if a.connected() {
+			ui.Text(c, a.inbound()).SingleLine().Font(fontMono).FontSize(fontS).TextColor(t.TextMuted)
+		}
+		ui.Box(c).Grow(1)
+		a.barTraffic(c, t)
+		a.barChart(c, t)
+	})
+}
+
+func (a *app) statusLabel() string {
+	switch {
+	case a.busy:
+		return i18n.T("正在启动内核…")
+	case !a.connected():
+		return i18n.T("未连接")
+	}
+	return i18n.T("已连接")
+}
+
+func (a *app) barTip() string {
+	parts := []string{}
+	if a.connected() {
+		parts = append(parts, a.node().Name)
+	}
+	if info := a.subInfo(); info != "" {
+		parts = append(parts, info)
+	}
+	return strings.Join(parts, "\n")
+}
+
+func (a *app) subInfo() string {
+	parts := []string{}
+	if traffic := a.subTraffic(); traffic != "" {
+		parts = append(parts, traffic)
+	}
+	if expire := a.subExpire(); expire != "" {
+		parts = append(parts, expire)
+	}
+	return strings.Join(parts, " · ")
+}
+
+func (a *app) barTraffic(c *ui.Context, t *ui.Theme) {
+	up, down := a.upRaw-a.upBase, a.downRaw-a.downBase
+	tip := ""
+	if a.statless() && a.local == nil {
+		up, down = 0, 0
+		tip = i18n.T("xray 不统计流量")
+	}
+	for _, one := range []struct {
+		icon *ui.SVG
+		n    int64
+	}{{iconUp, up}, {iconDown, down}} {
+		cell := ui.Row(c).Width(cellTraffic).Gap(gapTight).AlignItems(ui.Center).Children(func() {
+			ui.Icon(c, one.icon).Size(iconSize, iconSize).TextColor(t.TextMuted)
+			text := "—"
+			if one.n > 0 {
+				text = size(one.n)
+			}
+			ui.Text(c, text).Grow(1).SingleLine().Font(fontMono).FontSize(fontS).TextColor(t.TextMuted)
+		})
+		if tip != "" {
+			cell.Tooltip(tip)
+		}
+	}
+}
+
+func (a *app) barChart(c *ui.Context, t *ui.Theme) {
+	values := a.hist
+	if a.statless() && a.local == nil {
+		values = nil
+	}
+	if len(values) > sparkBars {
+		values = values[len(values)-sparkBars:]
+	}
+	peak := int64(0)
+	for _, value := range values {
+		if value > peak {
+			peak = value
+		}
+	}
+	pad := sparkBars - len(values)
+	chart := ui.Row(c).Width(sparkWidth).Height(sparkHeight).Gap(sparkGap).AlignItems(ui.End)
+	chart.Tooltip(fmt.Sprintf(i18n.T("最近 %d 秒的合计吞吐"), sparkBars))
+	chart.Children(func() {
+		for i := 0; i < sparkBars; i++ {
+			height, color := float32(1), t.Border
+			if at := i - pad; at >= 0 && values[at] > 0 {
+				color = t.TextMuted
+				if peak > 0 {
+					height = max(1, sparkHeight*float32(values[at])/float32(peak))
+				}
+			}
+			ui.Box(c).Width(sparkBar).Height(height).Radius(sparkBar / 2).Background(color)
 		}
 	})
 }
 
-func (a *app) statusText() string {
-	if a.busy {
-		return i18n.T("正在启动内核…")
+func (a *app) statless() bool {
+	return a.kernel != nil && a.kernel.Kind() != core.SingBox
+}
+
+func (a *app) subTraffic() string {
+	item := a.subs.Item(a.node().Sub)
+	if item == nil || item.Total <= 0 {
+		return ""
 	}
-	if !a.connected() {
-		return i18n.T("未连接")
+	return fmt.Sprintf(i18n.T("订阅 %s / %s"), size(item.Used), size(item.Total))
+}
+
+func (a *app) subExpire() string {
+	item := a.subs.Item(a.node().Sub)
+	if item == nil || item.Expire <= 0 {
+		return ""
 	}
-	return i18n.T("已连接")
+	return fmt.Sprintf(i18n.T("到期 %s"), time.Unix(item.Expire, 0).Format("2006-01-02"))
 }
 
 func (a *app) latency(i int) string {
@@ -447,23 +533,4 @@ func size(n int64) string {
 	default:
 		return fmt.Sprintf("%.2f GB", float64(n)/(1<<30))
 	}
-}
-
-var sparkBlocks = []rune("▁▂▃▄▅▆▇█")
-
-func sparkline(values []int64) string {
-	peak := int64(0)
-	for _, value := range values {
-		if value > peak {
-			peak = value
-		}
-	}
-	if peak == 0 {
-		return ""
-	}
-	out := make([]rune, 0, len(values))
-	for _, value := range values {
-		out = append(out, sparkBlocks[value*7/peak])
-	}
-	return string(out)
 }

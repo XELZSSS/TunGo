@@ -27,8 +27,8 @@ func (a *app) shortcutForm(c *ui.Context) {
 	}
 	t := c.Theme()
 	ui.Modal(c, &a.editingShortcuts, func() {
-		ui.Column(c).Gap(gapLoose).Width(520).Children(func() {
-			heading(c, i18n.T("全局热键"))
+		ui.Column(c).Gap(gapLoose).Width(dialogBase).Children(func() {
+			heading(c, i18n.T("热键"))
 			muted(c, t, i18n.T("写一个组合键，如 CommandOrControl+Alt+T；留空表示不绑定。它由系统截获，别的窗口有焦点时也生效。"))
 			for _, one := range []struct {
 				action string

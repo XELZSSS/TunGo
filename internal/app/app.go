@@ -33,6 +33,7 @@ type app struct {
 	forms
 	routing
 	link
+	restores
 }
 
 func newApp() *app {
@@ -42,7 +43,7 @@ func newApp() *app {
 	}
 	a := &app{
 		shell:   shell{themeName: "light"},
-		lists:   lists{panePct: 65},
+		lists:   lists{panePct: 70},
 		servers: servers{kind: string(core.Auto)},
 		kernels: kernels{skipped: map[string]string{}},
 		link:    link{proxy: string(sysproxy.ModeSet), proxyOn: string(sysproxy.ModeSet)},
@@ -50,6 +51,13 @@ func newApp() *app {
 	a.launchKill = map[int]func(){}
 	a.measureCtx, a.cancelMeas = context.WithCancel(context.Background())
 	a.list.Selected = &a.row
+	a.list.Selection = &a.picked
+	a.list.Key = func(row int) any {
+		if row < 0 || row >= len(a.shown) {
+			return nil
+		}
+		return a.shown[row]
+	}
 	a.rowAt = -1
 	a.list.RowHeight = tableRowHeight
 	a.connList.RowHeight = tableRowHeight
@@ -96,8 +104,15 @@ func (a *app) loadAll() error {
 	a.tun = remembered.Tun
 	a.port = remembered.Port
 	a.applied = remembered.Applied
-	a.ruleBase = remembered.RuleBase
-	core.SetSourceBase(a.ruleBase)
+	if remembered.Pane > 0 {
+		a.panePct = remembered.Pane
+	}
+	a.mirror = remembered.Mirror
+	core.SetMirror(a.mirror)
+	a.autoConnect = remembered.AutoConnect
+	a.startHidden = remembered.StartHidden
+	a.autoReconnect = !remembered.NoReconnect
+	a.notify = !remembered.NoNotify
 	if a.applied != "" {
 		if !sysproxy.Restore() {
 			sysproxy.Reset()
@@ -170,9 +185,14 @@ func (a *app) saveSettings() {
 	saved := settings{
 		Skipped: a.skipped, Kind: a.kind, Theme: a.themeName, Lang: i18n.Lang(),
 		Proxy: a.proxy, ProxyOn: a.proxyOn, Tun: a.tun, Shortcuts: a.shortcuts,
-		Applied:  a.applied,
-		Port:     a.port,
-		RuleBase: a.ruleBase,
+		Applied:     a.applied,
+		Port:        a.port,
+		Mirror:      a.mirror,
+		AutoConnect: a.autoConnect,
+		StartHidden: a.startHidden,
+		NoReconnect: !a.autoReconnect,
+		NoNotify:    !a.notify,
+		Pane:        a.panePct,
 	}
 	if err := saved.save(); err != nil {
 		a.logf(i18n.T("保存设置失败：%s"), err)
@@ -268,4 +288,5 @@ func (a *app) setNodes(nodes []core.Node) {
 func (a *app) nodesChanged() {
 	a.nodesVersion++
 	a.rowsDirty = true
+	a.picked.Clear()
 }

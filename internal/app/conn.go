@@ -42,6 +42,12 @@ func (a *app) connect() {
 		a.hint(fmt.Sprintf(i18n.T("%s 带不了 %s，请在菜单里换一个内核"), kind, what))
 		return
 	}
+	targets, err := a.targetsFor(kind)
+	if err != nil {
+		a.fail(err.Error())
+		a.logf("%s", err)
+		return
+	}
 	if !node.Direct() {
 		if _, err := core.Binary(kind); err != nil {
 			a.fail(fmt.Sprintf(i18n.T("安装包里没有 %s，请重新下载完整安装包"), kind))
@@ -71,10 +77,10 @@ func (a *app) connect() {
 	a.busy = true
 	a.hint(i18n.T("正在启动内核…"))
 	a.event(i18n.T("启动 %s：%s"), kind, node.Name)
-	go a.launch(wait, prev, kind, node, a.port, tun, ticket)
+	go a.launch(wait, prev, kind, node, targets, a.port, tun, ticket)
 }
 
-func (a *app) launch(wait <-chan struct{}, prev running, kind core.Kind, node core.Node, port int, tun bool, ticket int) {
+func (a *app) launch(wait <-chan struct{}, prev running, kind core.Kind, node core.Node, targets []core.Node, port int, tun bool, ticket int) {
 	if wait != nil {
 		<-wait
 	}
@@ -87,7 +93,7 @@ func (a *app) launch(wait <-chan struct{}, prev running, kind core.Kind, node co
 	defer a.dropLaunch(ticket)
 
 	if !node.Direct() {
-		started, err := startKernel(kind, node, tun)
+		started, err := startKernel(kind, node, targets, tun)
 		if err != nil {
 			a.settle(ticket, func() {
 				a.busy = false
@@ -137,19 +143,21 @@ func (a *app) launch(wait <-chan struct{}, prev running, kind core.Kind, node co
 		a.kernel = kernel
 		a.local = local
 		a.stop = make(chan struct{})
+		a.connectedAt = time.Now()
 		a.upRaw, a.downRaw, a.upBase, a.downBase = 0, 0, 0, 0
 		a.sampleUp, a.sampleDown, a.hist = 0, 0, nil
-		a.notice = ""
 		if note != "" {
 			a.logf("%s", note)
 		}
 		if tun {
 			a.event(i18n.T("已连接：%s 接管全部流量"), node.Name)
+			a.notifyResult(true, node.Name)
 			if err := a.clearSysProxy(); err != nil {
 				a.logf(i18n.T("系统代理：%s"), err)
 			}
 		} else {
 			a.event(i18n.T("已连接：%s 在 %s"), node.Name, local.Addr())
+			a.notifyResult(true, node.Name)
 			if a.proxy == string(sysproxy.ModeSet) || a.proxy == string(sysproxy.ModePac) {
 				a.applySysProxy()
 			}
@@ -244,6 +252,7 @@ func (a *app) disconnect() {
 	a.restartMeasures()
 	a.tries++
 	a.busy = false
+	a.connectedAt = time.Time{}
 	if err := a.clearSysProxy(); err != nil {
 		a.fail(err.Error())
 		a.logf(i18n.T("系统代理：%s"), err)
@@ -345,20 +354,20 @@ func (a *app) currentDrain() <-chan struct{} {
 	return a.drain
 }
 
-func startKernel(kind core.Kind, node core.Node, tun bool) (*core.Kernel, error) {
-	kernel, err := startOnce(kind, node, tun)
+func startKernel(kind core.Kind, node core.Node, targets []core.Node, tun bool) (*core.Kernel, error) {
+	kernel, err := startOnce(kind, node, targets, tun)
 	if err != nil && !tun && busyPort(err) {
-		kernel, err = startOnce(kind, node, tun)
+		kernel, err = startOnce(kind, node, targets, tun)
 	}
 	return kernel, err
 }
 
-func startOnce(kind core.Kind, node core.Node, tun bool) (*core.Kernel, error) {
+func startOnce(kind core.Kind, node core.Node, targets []core.Node, tun bool) (*core.Kernel, error) {
 	socks, err := kernelInbound()
 	if err != nil {
 		return nil, err
 	}
-	return core.Start(kind, node, socks, tun)
+	return core.Start(kind, node, targets, socks, tun)
 }
 
 func busyPort(err error) bool {

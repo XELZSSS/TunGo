@@ -8,14 +8,27 @@ import (
 	"tungo/internal/i18n"
 )
 
-func xrayRouting(routing Routing, n Node) (map[string]any, error) {
+func xrayRouting(routing Routing, n Node, targets []Node) (map[string]any, error) {
 	balancer := ""
 	if n.Group() {
 		balancer = balancerTag
 	}
+	grouped := map[string]bool{}
+	extraBalancers := []any{}
+	for _, target := range targets {
+		if !target.Group() {
+			continue
+		}
+		tag := TargetTag(target.Name)
+		grouped[tag] = true
+		extraBalancers = append(extraBalancers, xrayTargetBalancer(target, tag))
+	}
 	out := func(rule string) map[string]any {
 		if rule == proxyTag && balancer != "" {
 			return map[string]any{"balancerTag": balancer}
+		}
+		if grouped[rule] {
+			return map[string]any{"balancerTag": rule}
 		}
 		return map[string]any{"outboundTag": rule}
 	}
@@ -101,8 +114,13 @@ func xrayRouting(routing Routing, n Node) (map[string]any, error) {
 		strategy = "IPIfNonMatch"
 	}
 	route := map[string]any{"domainStrategy": strategy, "rules": rules}
+	balancers := []any{}
 	if balancer != "" {
-		route["balancers"] = []any{xrayBalancer(n.StrategyOr(), n)}
+		balancers = append(balancers, xrayBalancer(n.StrategyOr(), n))
+	}
+	balancers = append(balancers, extraBalancers...)
+	if len(balancers) > 0 {
+		route["balancers"] = balancers
 	}
 	return route, nil
 }

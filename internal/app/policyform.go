@@ -24,7 +24,7 @@ func (a *app) routeForm(c *ui.Context) {
 	}
 	t := c.Theme()
 	ui.Modal(c, &a.editingRoute, func() {
-		ui.Column(c).Gap(gapLoose).Width(660).Height(560).Children(func() {
+		ui.Column(c).Gap(gapLoose).Width(dialogWide).Height(dialogBody).Children(func() {
 			heading(c, fmt.Sprintf(i18n.T("路由规则 · %s"), routeLabel(a.routes.Current)))
 			muted(c, t, i18n.T("从上往下第一条命中的规则决定走法，都没有命中就按最终走法。域名可写 geosite:cn、domain:x、full:x、keyword:x、regexp:x，地址可写 geoip:cn、网段或单个地址，端口可写 80,443 或 1000-2000。"))
 			ui.Row(c).Gap(gapBase).AlignItems(ui.Center).Children(func() {
@@ -33,7 +33,7 @@ func (a *app) routeForm(c *ui.Context) {
 				ui.Select(c, &a.routeStrategy, core.Strategies).Label(i18n.T("域名解析策略（只对 xray 生效）")).Width(240)
 			})
 			ui.Divider(c)
-			ui.Scroll(c).Grow(1).Children(func() {
+			ui.Scroll(c).Grow(1).Padding(0, scrollGutter, 0, 0).Children(func() {
 				ui.Column(c).Gap(gapTight).Children(func() {
 					if len(a.rules) == 0 {
 						muted(c, t, i18n.T("还没有规则：所有流量都按最终走法"))
@@ -87,18 +87,19 @@ func (a *app) ruleForm(c *ui.Context) {
 	}
 	t := c.Theme()
 	ui.Modal(c, &a.editingRule, func() {
-		ui.Column(c).Gap(gapBase).Width(580).Height(520).Children(func() {
+		ui.Column(c).Gap(gapBase).Width(dialogBase).Height(dialogBody).Children(func() {
 			heading(c, i18n.T("规则"))
 			muted(c, t, i18n.T("填了哪几项就按哪几项匹配，任意一项命中即算命中。"))
-			ui.Scroll(c).Grow(1).Children(func() {
+			ui.Scroll(c).Grow(1).Padding(0, scrollGutter, 0, 0).Children(func() {
 				ui.Column(c).Gap(gapBase).Children(func() {
 					ui.Row(c).Gap(gapBase).Children(func() {
 						ui.TextInput(c, &a.ruleDraft.Remark).Label(i18n.T("备注")).Grow(1)
 						out := outName(a.ruleDraft.Out)
-						if ui.Select(c, &out, outNames()).Label(i18n.T("出口")).Width(140).Changed() {
+						if ui.Select(c, &out, a.outChoices()).Label(i18n.T("出口")).Width(190).Changed() {
 							a.ruleDraft.Out = outOf(out)
 						}
 					})
+					muted(c, t, i18n.T("出口除了代理、直连、拦截，还可以选某个节点或策略组：命中的流量走它，没命中的按最终走法。"))
 					ui.TextArea(c, &a.ruleDomains).Label(i18n.T("域名（geosite:cn、domain:x、full:x、keyword:x、regexp:x）")).Height(96)
 					ui.TextArea(c, &a.ruleIPs).Label(i18n.T("地址（geoip:cn、10.0.0.0/8、1.1.1.1）")).Height(80)
 					ui.Row(c).Gap(gapBase).Children(func() {
@@ -263,7 +264,23 @@ func outNames() []string {
 	return names
 }
 
-func outName(out string) string { return i18n.T(outLabels[out]) }
+func outName(out string) string {
+	if label, ok := outLabels[out]; ok {
+		return i18n.T(label)
+	}
+	return out
+}
+
+func (a *app) outChoices() []string {
+	names := outNames()
+	for _, node := range a.nodes {
+		if node.Direct() || core.IsOut(node.Name) {
+			continue
+		}
+		names = append(names, node.Name)
+	}
+	return names
+}
 
 func outOf(name string) string {
 	for _, out := range core.Outs {
@@ -271,5 +288,5 @@ func outOf(name string) string {
 			return out
 		}
 	}
-	return core.Outs[0]
+	return name
 }

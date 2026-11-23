@@ -41,7 +41,7 @@ func (a *app) checkApp(quiet bool) {
 			case err != nil:
 				a.logf(i18n.T("检查应用更新失败：%s"), err)
 				if !quiet {
-					a.fail(fmt.Sprintf(i18n.T("检查应用更新失败：%s"), err))
+					a.fail(fmt.Sprintf(i18n.T("检查应用更新失败：%s（应用更新只走 GitHub，内核和规则集可以在「下载镜像」里走镜像）"), err))
 				}
 			case update == nil:
 				a.logf(i18n.T("已是最新版本：%s"), mygo.App.Version())
@@ -104,11 +104,11 @@ func (a *app) updateDialog(c *ui.Context) {
 	}
 	t := c.Theme()
 	ui.Modal(c, &a.releases.dialog, func() {
-		ui.Column(c).Gap(gapBase).Width(480).Children(func() {
+		ui.Column(c).Gap(gapBase).Width(dialogBase).Children(func() {
 			heading(c, i18n.T("应用更新"))
 			muted(c, t, fmt.Sprintf(i18n.T("发现新版本 %s（当前 %s）"), update.Version, mygo.App.Version()))
 			if update.Notes != "" {
-				ui.Scroll(c).Height(140).Children(func() {
+				ui.Scroll(c).Height(120).Padding(0, scrollGutter, 0, 0).Children(func() {
 					muted(c, t, update.Notes)
 				})
 			}

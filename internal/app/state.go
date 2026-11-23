@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -14,19 +15,21 @@ import (
 )
 
 type shell struct {
-	win        *mygo.Window
-	tray       *mygo.Tray
-	quitting   bool
-	maximized  bool
-	themeName  string
-	writeNext  string
-	queued     []func()
-	measureCtx context.Context
-	cancelMeas context.CancelFunc
-	quitOnce   sync.Once
-	launchMu   sync.Mutex
-	launchKill map[int]func()
-	drainMu    sync.Mutex
+	win         *mygo.Window
+	tray        *mygo.Tray
+	quitting    bool
+	maximized   bool
+	themeName   string
+	writeNext   string
+	queued      []func()
+	measureCtx  context.Context
+	cancelMeas  context.CancelFunc
+	quitOnce    sync.Once
+	launchMu    sync.Mutex
+	launchKill  map[int]func()
+	drainMu     sync.Mutex
+	startHidden bool
+	autoConnect bool
 }
 
 type lists struct {
@@ -47,6 +50,8 @@ type lists struct {
 	rowsDesc     bool
 	groups       []string
 	groupsAt     int
+	search       string
+	picked       ui.Selection[int]
 }
 
 type servers struct {
@@ -59,12 +64,10 @@ type servers struct {
 }
 
 type feedback struct {
-	notice     string
-	noticeKind noticeKind
-	busy       bool
-	tries      int
-	logs       []string
-	logScroll  ui.ScrollState
+	busy      bool
+	tries     int
+	logs      []string
+	logScroll ui.ScrollState
 }
 
 type subscriptions struct {
@@ -151,9 +154,9 @@ type routing struct {
 	dnsSplit         string
 	routeWas         core.Routing
 	dnsWas           core.DNS
-	ruleBase         string
-	editingRuleBase  bool
-	ruleBaseText     string
+	mirror           string
+	editingMirror    bool
+	mirrorText       string
 }
 
 type link struct {
@@ -175,4 +178,13 @@ type link struct {
 	sampleUp    int64
 	sampleDown  int64
 	hist        []int64
+
+	autoReconnect bool
+	notify        bool
+	connectedAt   time.Time
+}
+
+type restores struct {
+	listing bool
+	paths   []string
 }

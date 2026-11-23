@@ -16,19 +16,25 @@ const (
 
 const detourTag = "detour"
 
-func Config(kind Kind, n Node, inbound string, policy Policy, clash, secret, tun string) ([]byte, error) {
+func Config(kind Kind, n Node, targets []Node, inbound string, policy Policy, clash, secret, tun string) ([]byte, error) {
 	var config map[string]any
+	planned := routed(policy.Routing, targets)
 	switch kind {
 	case SingBox:
 		outbounds, err := singBoxOutbounds(n)
 		if err != nil {
 			return nil, err
 		}
+		extra, err := targetOutbounds(kind, targets)
+		if err != nil {
+			return nil, err
+		}
+		outbounds = append(outbounds, extra...)
 		in, err := singBoxInbound(inbound)
 		if err != nil {
 			return nil, err
 		}
-		route, err := singBoxRoute(policy.Routing)
+		route, err := singBoxRoute(planned)
 		if err != nil {
 			return nil, err
 		}
@@ -58,6 +64,11 @@ func Config(kind Kind, n Node, inbound string, policy Policy, clash, secret, tun
 		if err != nil {
 			return nil, err
 		}
+		extra, err := targetOutbounds(kind, targets)
+		if err != nil {
+			return nil, err
+		}
+		outbounds = append(outbounds, extra...)
 		in, err := xrayInbound(inbound)
 		if err != nil {
 			return nil, err
@@ -66,7 +77,7 @@ func Config(kind Kind, n Node, inbound string, policy Policy, clash, secret, tun
 		if tun != "" {
 			inbounds = append(inbounds, xrayTun(tun), xrayDNSInbound())
 		}
-		routing, err := xrayRouting(policy.Routing, n)
+		routing, err := xrayRouting(planned, n, targets)
 		if err != nil {
 			return nil, err
 		}
@@ -88,7 +99,7 @@ func Config(kind Kind, n Node, inbound string, policy Policy, clash, secret, tun
 			"routing": routing,
 		}
 
-		for key, value := range xrayMeasure(n) {
+		for key, value := range xrayMeasure(n, targets) {
 			config[key] = value
 		}
 	default:

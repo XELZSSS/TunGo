@@ -80,17 +80,18 @@ func carry() {
 func (a *app) ready() {
 	a.win = mygo.NewWindow(mygo.WindowOptions{
 		Title:     "TunGo",
-		Width:     1300,
-		Height:    800,
-		MinWidth:  1280,
-		MinHeight: 560,
+		Width:     1360,
+		Height:    880,
+		MinWidth:  1060,
+		MinHeight: 620,
 
 		TitleBarStyle:     mygo.TitleBarHidden,
 		HideWindowButtons: true,
 
-		StateKey: "main",
+		StateKey: "main-v2",
 		Content:  ui.View(a.view),
 	})
+	a.win.SetActiveAppearance(true)
 	if icon, err := appIcon(256); err != nil {
 		log.Print("no window icon: ", err)
 	} else if err := a.win.SetIcon(icon); err != nil {
@@ -113,6 +114,7 @@ func (a *app) ready() {
 		log.Print("no url scheme: ", err)
 	}
 	a.bindShortcuts()
+	a.watchSystem()
 	a.probe()
 	a.checkApp(true)
 	if item := a.subs.Running(); item != nil {
@@ -125,6 +127,41 @@ func (a *app) ready() {
 		a.update(func() { a.know(a.kernelKind()) })
 		a.update(a.check)
 	}()
+	if a.startHidden {
+		a.win.Hide()
+	}
+	if a.autoConnect && len(a.nodes) > 0 && !a.node().Direct() {
+		a.connect()
+	}
+}
+
+const reconnectGrace = 12 * time.Second
+
+func (a *app) watchSystem() {
+	mygo.Network.OnChanged(func(status mygo.NetworkStatus) {
+		a.update(func() {
+			if !status.Online || !a.autoReconnect || !a.connected() || a.busy {
+				return
+			}
+			if a.local == nil {
+				return
+			}
+			if time.Since(a.connectedAt) < reconnectGrace {
+				return
+			}
+			a.logf("%s", i18n.T("网络变了，正在重连"))
+			a.connect()
+		})
+	})
+	mygo.Power.OnResume(func() {
+		a.update(func() {
+			if !a.autoReconnect || !a.connected() || a.busy {
+				return
+			}
+			a.logf("%s", i18n.T("系统唤醒，正在重连"))
+			a.connect()
+		})
+	})
 }
 
 func (a *app) show() {
@@ -147,6 +184,7 @@ func (a *app) quit() {
 		a.quitting = true
 		a.killLaunches()
 		a.cancelMeas()
+		a.saveSettings()
 		if err := a.clearSysProxy(); err != nil {
 			log.Print(err)
 		}
@@ -235,9 +273,9 @@ func (a *app) refreshTray() {
 					log.Print(err)
 				}
 			}},
-		{Label: i18n.T("打开日志目录"), Click: func(*mygo.MenuItem, *mygo.Window) { a.openLogs() }},
+		{Label: i18n.T("日志目录"), Click: func(*mygo.MenuItem, *mygo.Window) { a.openLogs() }},
 		mygo.Separator(),
-		{Label: i18n.T("退出 TunGo"), Click: func(*mygo.MenuItem, *mygo.Window) {
+		{Label: i18n.T("退出"), Click: func(*mygo.MenuItem, *mygo.Window) {
 			a.requestQuit()
 		}},
 	}))

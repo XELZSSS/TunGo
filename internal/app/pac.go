@@ -8,29 +8,18 @@ import (
 	"net/http"
 	"time"
 
+	"tungo/internal/core"
 	"tungo/internal/i18n"
 )
 
 const stopTimeout = 2 * time.Second
 
-const pacScript = `function FindProxyForURL(url, host) {
-  if (isPlainHostName(host) ||
-      shExpMatch(host, "*.local") ||
-      isInNet(host, "127.0.0.0", "255.0.0.0") ||
-      isInNet(host, "10.0.0.0", "255.0.0.0") ||
-      isInNet(host, "172.16.0.0", "255.240.0.0") ||
-      isInNet(host, "192.168.0.0", "255.255.0.0") ||
-      isInNet(host, "169.254.0.0", "255.255.0.0")) {
-    return "DIRECT";
-  }
-  return "PROXY %s;DIRECT;";
-}`
-
 func (a *app) startPac(addr string) (string, error) {
 	a.stopPac()
+	script := core.PacScript(addr, core.LoadRouting())
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-ns-proxy-autoconfig")
-		fmt.Fprintf(w, pacScript, addr)
+		fmt.Fprint(w, script)
 	})
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

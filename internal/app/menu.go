@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"net"
 	"slices"
 	"strings"
 
@@ -41,7 +42,7 @@ func (a *app) menuBar(c *ui.Context, t *ui.Theme) {
 			}
 			tun := ui.Toggle(c, &a.tun, "TUN").Tooltip(i18n.T("TUN 接管全部流量"))
 			if !admin() {
-				tun = tun.Tooltip(i18n.T("TUN 要管理员权限：从「设置」里重启为管理员")).Disabled(true)
+				tun = tun.Tooltip(i18n.T("需要管理员权限")).Disabled(true)
 			}
 			if tun.Changed() {
 				a.setTun(a.tun)
@@ -66,7 +67,7 @@ func (a *app) menuBar(c *ui.Context, t *ui.Theme) {
 }
 
 func (a *app) serversMenu(c *ui.Context, m *ui.Menu) {
-	if m.Item(i18n.T("从剪贴板导入")).Chosen() {
+	if m.Item(i18n.T("剪贴板导入")).Chosen() {
 		a.importClipboard(c)
 	}
 	m.Submenu(i18n.T("添加服务器"), func(p *ui.Menu) {
@@ -85,50 +86,30 @@ func (a *app) serversMenu(c *ui.Context, m *ui.Menu) {
 		}
 	})
 	m.Separator()
-	empty := len(a.nodes) == 0
-	direct := a.node().Direct()
-
-	if m.Item(i18n.T("编辑当前节点")).Disabled(empty || direct).Chosen() {
-		a.after(func() { a.editAny(a.chosen) })
+	if m.Item(i18n.T("测速全部")).Chosen() {
+		a.probe()
 	}
-	if m.Item(i18n.T("删除当前节点")).Disabled(empty || direct).Chosen() {
-		a.after(func() { a.remove(a.chosen) })
-	}
-	if m.Item(i18n.T("复制分享链接")).Disabled(empty || direct || a.node().Group()).Chosen() {
-		a.share(c)
+	if a.picked.Len() > 0 {
+		if m.Item(fmt.Sprintf(i18n.T("复制选中 %d 个链接"), a.picked.Len())).Chosen() {
+			a.after(a.copyPicked)
+		}
+		if m.Item(fmt.Sprintf(i18n.T("删除选中 %d 个"), a.picked.Len())).Chosen() {
+			a.after(a.removePicked)
+		}
 	}
 	m.Separator()
-	if m.Item(i18n.T("上移")).Disabled(empty || direct || a.chosen == 0).Chosen() {
-		a.after(func() { a.move(a.chosen, -1) })
-	}
-	if m.Item(i18n.T("下移")).Disabled(empty || direct || a.chosen >= len(a.nodes)-1).Chosen() {
-		a.after(func() { a.move(a.chosen, 1) })
-	}
-	m.Submenu(i18n.T("测速"), func(p *ui.Menu) {
-
-		if p.Item(i18n.T("TCP 延迟（全部）")).Chosen() {
-			a.probe()
-		}
-		if p.Item(i18n.T("TCP 延迟（当前节点）")).Disabled(empty).Chosen() {
-			a.after(func() { a.pingNode(a.chosen) })
-		}
-	})
-	if m.Item(i18n.T("检测当前节点解锁")).Disabled(empty || direct || !a.connected()).Chosen() {
-		a.checkUnlock()
-	}
-	m.Separator()
-	if m.Item(i18n.T("添加策略组")).Chosen() {
+	if m.Item(i18n.T("新建策略组")).Chosen() {
 		a.after(a.addGroup)
 	}
 	m.Separator()
-	if m.Item(i18n.T("重新加载节点")).Chosen() {
+	if m.Item(i18n.T("重新加载")).Chosen() {
 		a.after(a.reload)
 	}
 	if m.Item(i18n.T("保存到文件")).Chosen() {
 		a.save()
 		a.logf("%s", i18n.T("已保存节点"))
 	}
-	if m.Item(i18n.T("打开节点文件")).Chosen() {
+	if m.Item(i18n.T("打开文件")).Chosen() {
 		a.reveal(a.nodesAt)
 	}
 }
@@ -139,16 +120,11 @@ func (a *app) nodeMenu(m *ui.Menu, at int) {
 	}
 	node := a.nodes[at]
 	direct := node.Direct()
-	if m.Item(i18n.T("使用这个节点")).Disabled(at == a.chosen || direct).Chosen() {
-		a.after(func() {
-			a.choose(at)
-			if !a.connected() {
-				a.connect()
-			}
-		})
+	edit := i18n.T("编辑")
+	if node.Group() {
+		edit = i18n.T("编辑策略组")
 	}
-	m.Separator()
-	if m.Item(i18n.T("编辑")).Chosen() {
+	if m.Item(edit).Chosen() {
 		a.after(func() { a.editAny(at) })
 	}
 	if m.Item(i18n.T("删除")).Disabled(direct).Chosen() {
@@ -156,6 +132,9 @@ func (a *app) nodeMenu(m *ui.Menu, at int) {
 	}
 	if m.Item(i18n.T("复制分享链接")).Disabled(direct || node.Group()).Chosen() {
 		a.after(func() { a.shareNode(node) })
+	}
+	if m.Item(i18n.T("复制地址")).Disabled(node.Server == "").Chosen() {
+		a.after(func() { a.copyText(net.JoinHostPort(node.Server, fmt.Sprint(node.Port)), i18n.T("已复制地址")) })
 	}
 	m.Separator()
 	if m.Item(i18n.T("上移")).Disabled(at == 0).Chosen() {
@@ -165,12 +144,53 @@ func (a *app) nodeMenu(m *ui.Menu, at int) {
 		a.after(func() { a.move(at, 1) })
 	}
 	m.Separator()
-	if m.Item(i18n.T("真连接延迟")).Disabled(direct).Chosen() {
+	if m.Item(i18n.T("真连接")).Disabled(direct).Chosen() {
 		a.after(func() { a.realPing(at) })
 	}
 	if m.Item(i18n.T("测速")).Disabled(direct).Chosen() {
 		a.after(func() { a.speedTest(at) })
 	}
+	if m.Item(i18n.T("检测解锁")).Disabled(direct || !a.connected()).Chosen() {
+		a.checkUnlock()
+	}
+	if a.picked.Len() > 0 {
+		m.Separator()
+		if m.Item(fmt.Sprintf(i18n.T("复制选中 %d 个链接"), a.picked.Len())).Chosen() {
+			a.after(a.copyPicked)
+		}
+		if m.Item(fmt.Sprintf(i18n.T("删除选中 %d 个"), a.picked.Len())).Chosen() {
+			a.after(a.removePicked)
+		}
+	}
+}
+
+func (a *app) copyText(text, done string) {
+	if text == "" {
+		return
+	}
+	a.writeNext = text
+	a.say(done)
+}
+
+func (a *app) copyPicked() {
+	var links []string
+	for at := range a.picked.All() {
+		if at < 0 || at >= len(a.nodes) {
+			continue
+		}
+		node := a.nodes[at]
+		if node.Direct() || node.Group() {
+			continue
+		}
+		if link, err := sub.URI(node); err == nil {
+			links = append(links, link)
+		}
+	}
+	if len(links) == 0 {
+		return
+	}
+	a.writeNext = strings.Join(links, "\n")
+	a.say(fmt.Sprintf(i18n.T("已复制 %d 个链接"), len(links)))
 }
 
 func (a *app) subscribeMenu(_ *ui.Context, m *ui.Menu) {
@@ -178,7 +198,7 @@ func (a *app) subscribeMenu(_ *ui.Context, m *ui.Menu) {
 	if m.Item(i18n.T("更新订阅")).Disabled(running == nil || a.subBusy).Chosen() {
 		a.refresh(running.Name)
 	}
-	if m.Item(i18n.T("更新订阅（通过代理）")).Disabled(running == nil || a.subBusy || a.local == nil).Chosen() {
+	if m.Item(i18n.T("经代理更新")).Disabled(running == nil || a.subBusy || a.local == nil).Chosen() {
 		a.refreshProxied(running.Name)
 
 	}
@@ -200,14 +220,14 @@ func (a *app) subscribeMenu(_ *ui.Context, m *ui.Menu) {
 }
 
 func (a *app) routingMenu(c *ui.Context, m *ui.Menu) {
-	if m.Item(i18n.T("编辑当前规则")).Chosen() {
+	if m.Item(i18n.T("编辑规则")).Chosen() {
 		a.openRouting()
 	}
 	if m.Item(i18n.T("新建配置")).Chosen() {
 		a.routeName = ""
 		a.editingRouteName = true
 	}
-	if m.Item(i18n.T("删除当前配置")).Disabled(len(a.routes.Items) < 2).Chosen() {
+	if m.Item(i18n.T("删除配置")).Disabled(len(a.routes.Items) < 2).Chosen() {
 		a.removeRouting()
 	}
 	m.Separator()
@@ -218,14 +238,14 @@ func (a *app) routingMenu(c *ui.Context, m *ui.Menu) {
 	m.Submenu(i18n.T("区域预置"), func(p *ui.Menu) { a.regionMenu(c, p) })
 	m.Separator()
 	m.Submenu(i18n.T("规则集"), func(p *ui.Menu) {
-		if p.Item(i18n.T("镜像源设置")).Chosen() {
-			a.openRuleBase()
+		if p.Item(i18n.T("下载镜像")).Chosen() {
+			a.openMirror()
 		}
 		if p.Item(i18n.T("更新全部规则集")).Chosen() {
 			a.refreshRuleSets()
 		}
 	})
-	if m.Item(i18n.T("忽略缺失的规则集并连接")).Chosen() {
+	if m.Item(i18n.T("忽略缺规则并连接")).Chosen() {
 		a.ignoreRules = true
 		a.connect()
 	}
@@ -257,7 +277,7 @@ func (a *app) settingsMenu(c *ui.Context, m *ui.Menu) {
 		}
 	})
 	if sysproxy.LoopbackAvailable() {
-		if m.Item(i18n.T("放行 Store 应用回环（UWP）")).Chosen() {
+		if m.Item(i18n.T("放行 UWP 回环")).Chosen() {
 			a.exemptLoopback()
 		}
 	}
@@ -267,34 +287,53 @@ func (a *app) settingsMenu(c *ui.Context, m *ui.Menu) {
 			a.logf("%s", err)
 		}
 	}
-	m.Submenu(i18n.T("全局热键"), func(p *ui.Menu) {
-		if p.Item(i18n.T("全局热键设置")).Chosen() {
+	if m.Item(i18n.T("启动即连接")).Checked(a.autoConnect).Chosen() {
+		a.autoConnect = !a.autoConnect
+		a.saveSettings()
+	}
+	if m.Item(i18n.T("启动只留托盘")).Checked(a.startHidden).Chosen() {
+		a.startHidden = !a.startHidden
+		a.saveSettings()
+	}
+	if m.Item(i18n.T("网络变化自动重连")).Checked(a.autoReconnect).Chosen() {
+		a.autoReconnect = !a.autoReconnect
+		a.saveSettings()
+	}
+	if m.Item(i18n.T("结果通知")).Checked(a.notify).Chosen() {
+		a.notify = !a.notify
+		a.saveSettings()
+	}
+	if m.Item(fmt.Sprintf(i18n.T("下载镜像 · %s"), mirrorLabel())).Chosen() {
+		a.openMirror()
+	}
+	m.Submenu(i18n.T("热键"), func(p *ui.Menu) {
+		if p.Item(i18n.T("热键设置")).Chosen() {
 			a.openShortcuts()
 		}
 	})
-	if m.Item(fmt.Sprintf(i18n.T("本地端口（%s）"), a.portLabel())).Chosen() {
+	if m.Item(fmt.Sprintf(i18n.T("本地端口 · %s"), a.portLabel())).Chosen() {
 		a.openPort()
 	}
 	m.Separator()
-	m.Submenu(i18n.T("备份与还原"), func(p *ui.Menu) { a.backupMenu(c, p) })
-	if m.Item(i18n.T("打开数据目录")).Chosen() {
+	m.Submenu(i18n.T("备份"), func(p *ui.Menu) { a.backupMenu(c, p) })
+	if m.Item(i18n.T("数据目录")).Chosen() {
 		a.reveal(mustDir())
 	}
-	if m.Item(i18n.T("打开日志目录")).Chosen() {
+	if m.Item(i18n.T("日志目录")).Chosen() {
 		a.openLogs()
 	}
 	m.Separator()
-	if m.Item(i18n.T("清除流量统计")).Chosen() {
+	if m.Item(i18n.T("清除流量")).Chosen() {
 		a.upBase, a.downBase = a.upRaw, a.downRaw
 		a.logf("%s", i18n.T("已清除流量统计"))
 	}
 	if !admin() {
-		if m.Item(i18n.T("重启为管理员")).Chosen() {
+		if m.Item(i18n.T("以管理员重启")).Chosen() {
 			a.rebootAsAdmin()
 		}
 	}
 	m.Separator()
-	if m.Item(i18n.T("退出 TunGo")).Chosen() {
+	if m.Item(i18n.T("退出")).Chosen() {
 		a.requestQuit()
 	}
 }
@@ -304,7 +343,7 @@ func (a *app) kernelMenu(_ *ui.Context, m *ui.Menu) {
 		name := string(kind)
 		label := name
 		if kind == core.Auto {
-			label = i18n.T("自动（默认 sing-box）")
+			label = i18n.T("自动")
 		}
 		if m.Item(label).Radio(a.kind == name).Disabled(a.connected()).Chosen() {
 			a.kind = name
@@ -313,14 +352,18 @@ func (a *app) kernelMenu(_ *ui.Context, m *ui.Menu) {
 			a.check()
 		}
 	}
+	m.Separator()
+	if m.Item(i18n.T("从文件安装")).Disabled(a.connected() || a.updating).Chosen() {
+		a.installFromFile()
+	}
 }
 
 func (a *app) helpMenu(m *ui.Menu) {
-	if m.Item(i18n.T("检查应用更新")).Disabled(a.releases.polling || a.releases.installing).Chosen() {
+	if m.Item(i18n.T("检查更新")).Disabled(a.releases.polling || a.releases.installing).Chosen() {
 		a.checkApp(false)
 	}
 	if update := a.releases.pending; update != nil {
-		if m.Item(fmt.Sprintf(i18n.T("更新应用到 %s"), update.Version)).Disabled(a.releases.installing).Chosen() {
+		if m.Item(fmt.Sprintf(i18n.T("更新到 %s"), update.Version)).Disabled(a.releases.installing).Chosen() {
 			a.installApp()
 		}
 	}
@@ -332,10 +375,10 @@ func (a *app) helpMenu(m *ui.Menu) {
 		m.Item(label).Disabled(true)
 	}
 	m.Separator()
-	if m.Item(i18n.T("检查内核更新")).Chosen() {
+	if m.Item(i18n.T("检查内核")).Chosen() {
 		a.check()
 	}
-	if m.Item(i18n.T("关于 TunGo")).Chosen() {
+	if m.Item(i18n.T("关于")).Chosen() {
 		a.about()
 	}
 }
@@ -473,12 +516,6 @@ func (a *app) reload() {
 	a.setNodes(nodes)
 	a.chosen = 0
 	a.logf(i18n.T("已重新加载 %d 个节点"), len(nodes))
-}
-
-func (a *app) share(c *ui.Context) {
-	if link := a.linkOf(a.node()); link != "" {
-		c.WriteClipboard(link)
-	}
 }
 
 func (a *app) shareNode(node core.Node) {

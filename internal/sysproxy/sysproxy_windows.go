@@ -1,4 +1,4 @@
-//go:build windows && !386
+//go:build windows
 
 package sysproxy
 
@@ -48,21 +48,21 @@ type optionList struct {
 
 type connectionOption struct {
 	option uint32
-	value  uint64
+	value  uintptr
 }
 
 type settings struct {
-	flags         uint64
+	flags         uintptr
 	proxyServer   string
 	proxyBypass   string
 	autoconfigURL string
 }
 
 type snapshot struct {
-	Flags      uint64 `json:"flags"`
-	Server     string `json:"server"`
-	Bypass     string `json:"bypass"`
-	Autoconfig string `json:"autoconfig"`
+	Flags      uintptr `json:"flags"`
+	Server     string  `json:"server"`
+	Bypass     string  `json:"bypass"`
+	Autoconfig string  `json:"autoconfig"`
 }
 
 const snapshotName = "sysproxy.json"
@@ -109,9 +109,9 @@ func query() (settings, bool) {
 	autoconfigURL := make([]uint16, maxURLLength)
 	options := []connectionOption{
 		{option: perConnFlags},
-		{option: perConnProxyServer, value: uint64(uintptr(unsafe.Pointer(&server[0])))},
-		{option: perConnProxyBypass, value: uint64(uintptr(unsafe.Pointer(&proxyBypass[0])))},
-		{option: perConnAutoconfigURL, value: uint64(uintptr(unsafe.Pointer(&autoconfigURL[0])))},
+		{option: perConnProxyServer, value: uintptr(unsafe.Pointer(&server[0]))},
+		{option: perConnProxyBypass, value: uintptr(unsafe.Pointer(&proxyBypass[0]))},
+		{option: perConnAutoconfigURL, value: uintptr(unsafe.Pointer(&autoconfigURL[0]))},
 	}
 	list := optionList{
 		dwSize:        uint32(unsafe.Sizeof(optionList{})),
@@ -144,7 +144,7 @@ func write(into settings) error {
 		}
 		value, _ := syscall.UTF16FromString(text)
 		alive = append(alive, value)
-		options = append(options, connectionOption{option: option, value: uint64(uintptr(unsafe.Pointer(&value[0])))})
+		options = append(options, connectionOption{option: option, value: uintptr(unsafe.Pointer(&value[0]))})
 	}
 	add(perConnProxyServer, into.proxyServer)
 	add(perConnProxyBypass, into.proxyBypass)
